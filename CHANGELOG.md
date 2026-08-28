@@ -21,6 +21,11 @@ All notable changes to this package are documented here. The format follows
   `fake-master` container.
 - `encodeEventQualifier()` and `encodeDetailedDeviceStatus()`, the counterparts
   of the decoders, so the diagnosis objects can be built as well as read.
+- Node icons of the suite's own: an M12 connector face with a mark for what
+  each node does — an arrow down for read, up for write, sliders for
+  parameters, a lens for scan, a warning sign for events, octets and a value
+  for `iodd decode`. The palette now reads as one family instead of borrowed
+  Font Awesome glyphs.
 - Example flows in Node-RED's **Import → Examples** menu: reading a sensor,
   commissioning a master, watching device health, and decoding bytes that never
   came from a master.

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 60" width="40" height="60" fill="#fff">
+  <!-- No connector here: this node decodes bytes that never came from a
+       master. Eight octets on top, engineering values out of the bottom. -->
+  <rect x="4"  y="4"  width="9.5" height="8.5" rx="2"/>
+  <rect x="15.2" y="4"  width="9.5" height="8.5" rx="2"/>
+  <rect x="26.5" y="4"  width="9.5" height="8.5" rx="2"/>
+  <rect x="4"  y="15" width="9.5" height="8.5" rx="2"/>
+  <rect x="15.2" y="15" width="9.5" height="8.5" rx="2"/>
+  <rect x="26.5" y="15" width="9.5" height="8.5" rx="2"/>
+  <path d="M17.5 27 h5 v8 H28 L20 46 12 35 h5.5 z"/>
+  <rect x="6" y="50" width="28" height="4" rx="2"/>
+  <rect x="6" y="57" width="17" height="3" rx="1.5"/>
+</svg>

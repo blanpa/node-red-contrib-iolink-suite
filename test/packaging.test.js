@@ -114,3 +114,42 @@ test('the example flows are valid and only use nodes that exist', () => {
     }
   }
 })
+
+test('every node icon exists, and every icon is used', () => {
+  // Node-RED silently falls back to a default icon for a missing file, so a
+  // typo here shows up as "why does that node look wrong" and nothing else.
+  const dir = path.join(root, 'icons')
+  const shipped = fs.readdirSync(dir)
+  const used = new Set()
+
+  for (const [name, file] of declared) {
+    const html = fs.readFileSync(path.join(root, file.replace(/\.js$/, '.html')), 'utf8')
+    const match = html.match(/icon:\s*'([^']+)'/)
+    if (!match) continue // a config node has no icon on the canvas
+    const icon = match[1]
+    if (icon.startsWith('font-awesome/')) continue
+    assert.ok(shipped.includes(icon), `${name} wants icons/${icon}, which is not there`)
+    used.add(icon)
+  }
+  for (const icon of shipped) {
+    assert.ok(used.has(icon), `icons/${icon} is shipped but no node uses it`)
+  }
+  assert.ok(pkg.files.includes('icons/'), 'package.json "files" must include icons/')
+})
+
+test('the icons are what Node-RED asks for: white, transparent, 2:3', () => {
+  for (const name of fs.readdirSync(path.join(root, 'icons'))) {
+    const svg = fs.readFileSync(path.join(root, 'icons', name), 'utf8')
+    const box = svg.match(/viewBox="0 0 (\d+) (\d+)"/)
+    assert.ok(box, `${name} needs a viewBox`)
+    assert.equal(Number(box[2]) / Number(box[1]), 1.5, `${name} must keep the 2:3 aspect ratio`)
+    assert.ok(Number(box[1]) >= 40, `${name} should be at least 40 x 60`)
+    // Anything but white would be invisible on some node colours, and the
+    // editor does not recolour a custom icon.
+    for (const colour of svg.matchAll(/(?:fill|stroke)="([^"]+)"/g)) {
+      assert.ok(['#fff', 'none'].includes(colour[1]),
+        `${name} paints with ${colour[1]}; node icons are white on transparent`)
+    }
+    assert.doesNotMatch(svg, /<image|<text/, `${name} should be shapes, not bitmaps or fonts`)
+  }
+})

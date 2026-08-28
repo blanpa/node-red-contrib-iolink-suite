@@ -152,6 +152,7 @@ lib/          adapters/  one file per master profile, raw hex only
 test/         unit tests; test/iodd/ covers the decoder
 docker/       the containers the test suites run in
 examples/     flows offered in Node-RED's Import → Examples menu
+icons/        the palette icons, white on transparent, 2:3 as Node-RED wants
 ```
 
 ## The simulator

@@ -60,6 +60,19 @@ test('the editor half of every node is served', async () => {
   }
 })
 
+test('the node icons are served by the editor', async () => {
+  // The icons live in a directory Node-RED only finds if the package shipped
+  // it - which is exactly the sort of thing that works locally and not once
+  // installed.
+  for (const icon of ['iolink-read.svg', 'iolink-write.svg', 'iolink-param.svg',
+    'iolink-scan.svg', 'iolink-event.svg', 'iodd-decode.svg']) {
+    const res = await fetch(`${BASE}/icons/node-red-contrib-iolink-suite/${icon}`)
+    assert.equal(res.status, 200, `${icon} is not served`)
+    const body = await res.text()
+    assert.match(body, /<svg/, `${icon} came back as something other than an SVG`)
+  }
+})
+
 test('the deployed flow is running', async () => {
   const { body } = await api('/flows', { headers: { Accept: 'application/json' } })
   const flows = Array.isArray(body) ? body : body.flows
