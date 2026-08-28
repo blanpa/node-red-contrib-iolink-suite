@@ -4,7 +4,7 @@
 FROM node:20-alpine
 
 WORKDIR /app
-COPY packages/node-red-suite/test/fake-master.js ./
+COPY test/fake-master.js ./
 
 ENV PORT=8080
 EXPOSE 8080

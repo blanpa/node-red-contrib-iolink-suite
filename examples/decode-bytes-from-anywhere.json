@@ -1,0 +1,55 @@
+[
+  {
+    "id": "ex4-comment",
+    "type": "comment",
+    "name": "Decode IO-Link bytes that never came from an IO-Link master",
+    "info": "Process data arriving over PROFINET, EtherNet/IP, Modbus, OPC UA, MQTT or from a PLC is still IO-Link process data: the device's IODD says what the bytes mean.\n\nPoint the iodd decode node at the device's IODD file (.xml or the vendor's .zip) and send the raw bytes as a hex string, a Buffer or a byte array. No master, no network.",
+    "x": 340,
+    "y": 60,
+    "wires": []
+  },
+  {
+    "id": "ex4-inject",
+    "type": "inject",
+    "name": "raw bytes",
+    "props": [{ "p": "payload" }],
+    "repeat": "",
+    "once": false,
+    "topic": "",
+    "payload": "092B0929",
+    "payloadType": "str",
+    "x": 140,
+    "y": 140,
+    "wires": [["ex4-decode"]]
+  },
+  {
+    "id": "ex4-decode",
+    "type": "iodd-decode",
+    "name": "",
+    "iodd": "/data/iodd/my-sensor.xml",
+    "mode": "decode",
+    "direction": "in",
+    "variant": "",
+    "conditions": "",
+    "language": "en",
+    "keyStyle": "preserve",
+    "enums": "value",
+    "strictLength": false,
+    "x": 330,
+    "y": 140,
+    "wires": [["ex4-debug"]]
+  },
+  {
+    "id": "ex4-debug",
+    "type": "debug",
+    "name": "values",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "x": 520,
+    "y": 140,
+    "wires": []
+  }
+]

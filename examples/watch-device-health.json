@@ -1,0 +1,82 @@
+[
+  {
+    "id": "ex3-comment",
+    "type": "comment",
+    "name": "Alarm when a port or a device changes state",
+    "info": "The event node polls the master and sends only when something changes, so a healthy plant stays quiet.\n\n\"Device status\" is ticked: it also reads DeviceStatus (ISDU 36) and DetailedDeviceStatus (ISDU 37) from every connected device - specified for every IO-Link device, so no vendor diagnosis API is needed. The switch below separates a device asking for maintenance from a port that lost its device.",
+    "x": 280,
+    "y": 60,
+    "wires": []
+  },
+  {
+    "id": "ex3-event",
+    "type": "iolink-event",
+    "name": "",
+    "master": "ex3-master",
+    "ports": "",
+    "interval": 2000,
+    "deviceStatus": true,
+    "x": 160,
+    "y": 160,
+    "wires": [["ex3-switch"]]
+  },
+  {
+    "id": "ex3-switch",
+    "type": "switch",
+    "name": "what happened?",
+    "property": "payload.connected",
+    "propertyType": "msg",
+    "rules": [{ "t": "false" }, { "t": "true" }],
+    "checkall": "false",
+    "repair": false,
+    "outputs": 2,
+    "x": 360,
+    "y": 160,
+    "wires": [["ex3-lost"], ["ex3-health"]]
+  },
+  {
+    "id": "ex3-lost",
+    "type": "debug",
+    "name": "device lost",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "x": 570,
+    "y": 120,
+    "wires": []
+  },
+  {
+    "id": "ex3-health",
+    "type": "debug",
+    "name": "device health",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "x": 580,
+    "y": 200,
+    "wires": []
+  },
+  {
+    "id": "ex3-master",
+    "type": "iolink-master",
+    "name": "IO-Link master",
+    "profile": "ifm",
+    "host": "192.168.1.50",
+    "httpPort": "",
+    "url": "",
+    "tls": false,
+    "timeout": 5000,
+    "ports": "1,2,3,4",
+    "language": "en",
+    "keyStyle": "preserve",
+    "ioddDir": "",
+    "ioddCacheDir": "",
+    "offline": false,
+    "paths": "",
+    "valuePath": ""
+  }
+]

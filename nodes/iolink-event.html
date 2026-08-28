@@ -1,0 +1,128 @@
+<script type="text/javascript">
+  RED.nodes.registerType('iolink-event', {
+    category: 'IO-Link',
+    color: '#c0deed',
+    defaults: {
+      name: { value: '' },
+      master: { value: '', type: 'iolink-master', required: true },
+      ports: { value: '' },
+      interval: { value: 2000, required: true, validate: RED.validators.number() },
+      deviceStatus: { value: false }
+    },
+    inputs: 1,
+    outputs: 1,
+    icon: 'font-awesome/fa-bell',
+    label: function () {
+      return this.name || (this.ports ? 'events port ' + this.ports : 'IO-Link events')
+    },
+    oneditprepare: function () {
+      $('#iolink-scan').on('click', function () {
+        const masterId = $('#node-input-master').val()
+        const status = $('#iolink-scan-status').text('scanning…').css('color', '')
+        if (!masterId || masterId === '_ADD_') {
+          return status.css('color', '#a44').text('choose and deploy a master first')
+        }
+        $.getJSON('iolink-suite/scan/' + masterId)
+          .done(function (ports) {
+            const used = ports.filter(function (p) { return p.connected })
+            status.css('color', '#4a4').text(used.length + ' of ' + ports.length + ' ports in use')
+            const list = $('#iolink-ports').empty()
+            ports.forEach(function (p) {
+              const label = 'Port ' + p.port + ' — ' +
+                (p.connected ? (p.productName || 'device ' + p.deviceId) : 'empty') +
+                (p.statusText ? ' (' + p.statusText + ')' : '')
+              $('<div>').css({ padding: '2px 0', color: p.connected ? '' : '#888' })
+                .text(label).appendTo(list)
+            })
+          })
+          .fail(function (xhr) {
+            const body = xhr.responseJSON || {}
+            status.css('color', '#a44').text(body.error || 'scan failed')
+          })
+      })
+    }
+  })
+</script>
+
+<script type="text/html" data-template-name="iolink-event">
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-input-name">
+  </div>
+  <div class="form-row">
+    <label for="node-input-master"><i class="fa fa-server"></i> Master</label>
+    <input type="text" id="node-input-master">
+  </div>
+  <div class="form-row">
+    <label for="node-input-ports"><i class="fa fa-plug"></i> Ports</label>
+    <input type="text" id="node-input-ports" placeholder="all ports">
+  </div>
+  <div class="form-row">
+    <label for="node-input-interval"><i class="fa fa-clock-o"></i> Poll</label>
+    <input type="text" id="node-input-interval" style="width:100px"> ms
+  </div>
+  <div class="form-row">
+    <label for="node-input-deviceStatus"><i class="fa fa-heartbeat"></i> Device status</label>
+    <input type="checkbox" id="node-input-deviceStatus" style="width:auto">
+    <span>Also ask each device how it is doing (two ISDU reads per port and poll)</span>
+  </div>
+  <div class="form-row">
+    <button type="button" class="red-ui-button" id="iolink-scan">
+      <i class="fa fa-search"></i> Scan master
+    </button>
+    <span id="iolink-scan-status" style="margin-left:10px"></span>
+  </div>
+  <div class="form-row">
+    <div id="iolink-ports"
+         style="max-height:180px;overflow:auto;border:1px solid #ccc;border-radius:4px;padding:6px">
+      <div class="form-tips">Scan to see which ports this master currently has,
+        then list the ones to watch above — comma separated, or leave empty for all.</div>
+    </div>
+  </div>
+</script>
+
+<script type="text/html" data-help-name="iolink-event">
+  <p>Watches the ports of a master and emits a message when something changes:
+     a device is plugged in or pulled, a port leaves operate, a wire breaks, or a
+     different device type appears on a port.</p>
+
+  <h3>Why it polls</h3>
+  <p>Masters differ in whether they can push events at all, so this node polls
+     port status and compares. It sends only on a change, so a healthy plant stays
+     quiet. The first poll after deploy establishes the baseline and emits
+     nothing — otherwise every port would raise an alarm on restart.</p>
+
+  <h3>Output</h3>
+  <dl class="message-properties">
+    <dt>payload <span class="property-type">object</span></dt>
+    <dd>Port number, connection state, status and mode with their plain-language
+        text, and the identity of the device that is there now.</dd>
+    <dt>changes <span class="property-type">array</span></dt>
+    <dd>One entry per field that moved, with <code>from</code> and <code>to</code>.</dd>
+    <dt>event <span class="property-type">object</span></dt>
+    <dd>The transition named in the terms of the IO-Link specification — device
+        appeared, device disappeared, device changed, status changed — with the
+        matching EventCode and its description.</dd>
+  </dl>
+
+  <h3>Device status</h3>
+  <p>Ticked, the node also reads <code>DeviceStatus</code> (ISDU index 36) and
+     <code>DetailedDeviceStatus</code> (index 37) from every connected device.
+     Both are specified for <i>every</i> IO-Link device, so this needs no vendor
+     diagnosis API — any master that can read an ISDU will do.</p>
+  <p>The payload then also carries <code>deviceStatus</code> (0 OK,
+     1 maintenance required, 2 out of specification, 3 functional check,
+     4 failure) with its text, and <code>deviceEvents</code>: the EventCodes the
+     device is currently signalling, each resolved to its meaning, type and
+     whether it just appeared or disappeared.</p>
+  <pre>{ "deviceStatus": 1, "deviceStatusText": "Maintenance required",
+  "deviceEvents": [ { "hex": "0x8C40", "type": "Warning", "mode": "appears",
+                      "name": "Maintenance required - Cleaning" } ] }</pre>
+  <p>A device that refuses index 36 is reported in
+     <code>deviceStatusError</code> rather than taking the whole port watch down.
+     Index 37 is optional and is simply left out when a device does not answer it.
+     A message is emitted whenever the status or the set of standing events
+     changes, so a sensor asking for cleaning shows up once, not every poll.</p>
+  <p>An input message polls once immediately, which is useful for reporting state
+     on demand rather than waiting for the next tick.</p>
+</script>

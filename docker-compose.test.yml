@@ -42,7 +42,7 @@ services:
       node-red:
         condition: service_healthy
     volumes:
-      - ./packages/node-red-suite/test/integration:/tests:ro
+      - ./test/integration:/tests:ro
     environment:
       NODE_RED_URL: http://node-red:1880
     working_dir: /tests

@@ -3,11 +3,9 @@ FROM node:20-alpine
 
 WORKDIR /src
 
-# The manifests first, so the dependency layer survives an edit to the source.
+# The manifest first, so the dependency layer survives an edit to the source.
 COPY package.json package-lock.json ./
-COPY packages/iodd-parser/package.json packages/iodd-parser/
-COPY packages/node-red-suite/package.json packages/node-red-suite/
-RUN npm install --workspaces --include-workspace-root --no-audit --no-fund
+RUN npm install --no-audit --no-fund
 
 COPY . .
 

@@ -1,0 +1,69 @@
+[
+  {
+    "id": "ex2-comment",
+    "type": "comment",
+    "name": "What is plugged into this master?",
+    "info": "The first flow to run on a new master. The scan node reports every port: which device is on it, in what state, and whether an IODD for it could be found - vendor, product name, how many parameters it has.\n\nA device with no published IODD still shows up; only the decoded value names are missing.",
+    "x": 220,
+    "y": 60,
+    "wires": []
+  },
+  {
+    "id": "ex2-inject",
+    "type": "inject",
+    "name": "scan",
+    "props": [{ "p": "payload" }],
+    "repeat": "",
+    "once": true,
+    "onceDelay": "1",
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 130,
+    "y": 140,
+    "wires": [["ex2-scan"]]
+  },
+  {
+    "id": "ex2-scan",
+    "type": "iolink-scan",
+    "name": "",
+    "master": "ex2-master",
+    "ports": "",
+    "resolveIodd": true,
+    "x": 300,
+    "y": 140,
+    "wires": [["ex2-debug"]]
+  },
+  {
+    "id": "ex2-debug",
+    "type": "debug",
+    "name": "ports",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "x": 480,
+    "y": 140,
+    "wires": []
+  },
+  {
+    "id": "ex2-master",
+    "type": "iolink-master",
+    "name": "IO-Link master",
+    "profile": "ifm",
+    "host": "192.168.1.50",
+    "httpPort": "",
+    "url": "",
+    "tls": false,
+    "timeout": 5000,
+    "ports": "1,2,3,4",
+    "language": "en",
+    "keyStyle": "preserve",
+    "ioddDir": "",
+    "ioddCacheDir": "",
+    "offline": false,
+    "paths": "",
+    "valuePath": ""
+  }
+]
