@@ -1,13 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 60" width="40" height="60" fill="#fff">
-  <rect x="17" y="0.5" width="6" height="6" rx="1"/>
-  <circle cx="20" cy="18" r="13" fill="none" stroke="#fff" stroke-width="3.6"/>
-  <circle cx="20" cy="11.4" r="2.4"/>
-  <circle cx="13.4" cy="18" r="2.4"/>
-  <circle cx="26.6" cy="18" r="2.4"/>
-  <circle cx="20" cy="24.6" r="2.4"/>
-  <!-- Something happened on the port, or the device is unwell. The bar and
-       the dot are cut out of the triangle, so the icon stays one white shape. -->
-  <path fill-rule="evenodd" d="M20 32 34.5 58 H5.5 z
-                               M17.5 41.5 h5 v8.4 h-5 z
-                               M20 52 a2.6 2.6 0 1 1 0 5.2 2.6 2.6 0 1 1 0-5.2 z"/>
+  <!-- Something happened on the port, or the device says it is unwell.
+       The bar and the dot are cut out, so the icon stays one white shape. -->
+  <path fill-rule="evenodd" d="M20 3 39 56 H1 z
+                               M17 22 h6 v18 h-6 z
+                               M20 44 a3.2 3.2 0 1 1 0 6.4 3.2 3.2 0 1 1 0-6.4 z"/>
 </svg>
