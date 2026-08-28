@@ -126,6 +126,7 @@ await finder.importPackage('/mnt/usb/vendor-iodd.zip')   // ZIP, path, or raw XM
 
 Every error is an `IoddError` with a stable `code`: `IODD_PARSE`,
 `IODD_UNSUPPORTED`, `IODD_AMBIGUOUS_VARIANT`, `IODD_BROKEN_REF`, `IODD_DECODE`,
+`IODD_NOT_FOUND`, `IODD_OFFLINE`,
 `IODD_ENCODE`.
 
 ## Supported

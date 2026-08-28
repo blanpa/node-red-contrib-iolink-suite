@@ -44,7 +44,7 @@ class IoddFinder {
 
   async _request (url, { binary = false } = {}) {
     if (this.offline) {
-      throw err(CODES.PARSE, 'finder is in offline mode', { offline: true })
+      throw err(CODES.OFFLINE, 'the IODD finder is in offline mode', { offline: true, url })
     }
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), this.timeout)
@@ -201,7 +201,7 @@ class IoddFinder {
       const { results } = await this.search({ vendorId, deviceId, size: 20 })
       const best = pickBest(results)
       if (!best) {
-        throw err(CODES.BROKEN_REF,
+        throw err(CODES.NOT_FOUND,
           `IODDfinder has no IODD for vendorId ${vendorId}, deviceId ${deviceId}. ` +
           'Import the vendor\'s IODD ZIP instead.',
           { vendorId, deviceId })
@@ -227,7 +227,11 @@ class IoddFinder {
         staleReason: networkError.message
       }
     }
-    throw networkError
+    // Name the device that could not be resolved: "offline mode" on its own
+    // tells the person reading the log nothing about which port is affected.
+    throw err(CODES.NOT_FOUND,
+      `no IODD for vendorId ${vendorId}, deviceId ${deviceId}: ${networkError.message}`,
+      { vendorId, deviceId, cause: networkError, reason: networkError.code })
   }
 }
 

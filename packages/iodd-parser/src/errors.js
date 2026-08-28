@@ -25,7 +25,11 @@ const CODES = {
   /** Raw data did not match the layout (too short, wrong length, bad value). */
   DECODE: 'IODD_DECODE',
   /** A value could not be encoded into the declared layout. */
-  ENCODE: 'IODD_ENCODE'
+  ENCODE: 'IODD_ENCODE',
+  /** No IODD for this device could be found, in the cache or in the registry. */
+  NOT_FOUND: 'IODD_NOT_FOUND',
+  /** The registry was needed but must not be contacted. */
+  OFFLINE: 'IODD_OFFLINE'
 }
 
 const err = (code, message, details) => new IoddError(code, message, details)
