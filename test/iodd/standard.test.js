@@ -2,7 +2,8 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const {
-  lookupEvent, decodeEventQualifier, decodeDetailedDeviceStatus, DEVICE_STATUS
+  lookupEvent, decodeEventQualifier, decodeDetailedDeviceStatus,
+  encodeEventQualifier, encodeDetailedDeviceStatus, DEVICE_STATUS
 } = require('../../lib/iodd')
 
 /**
@@ -76,4 +77,40 @@ test('DeviceStatus values carry the specified wording', () => {
   assert.equal(DEVICE_STATUS[0], 'Device is OK')
   assert.equal(DEVICE_STATUS[4], 'Failure')
   assert.equal(lookupEvent(0x8C40).deviceStatus, 1) // "maintenance required"
+})
+
+// ------------------------------------------------- building the same objects
+
+test('an event qualifier survives a round trip', () => {
+  const qualifier = { mode: 'appears', type: 'Warning', source: 'device', instance: 'application' }
+  const raw = encodeEventQualifier(qualifier)
+  assert.equal(raw, 0xE4)
+  const { qualifier: _raw, ...back } = decodeEventQualifier(raw)
+  assert.deepEqual(back, qualifier)
+})
+
+test('an event takes the type the specification gives its code', () => {
+  // 0x8C40 is a warning in Table D.1; nobody should have to restate that.
+  const [event] = decodeDetailedDeviceStatus(encodeDetailedDeviceStatus(['0x8C40']))
+  assert.equal(event.type, 'Warning')
+  assert.equal(event.mode, 'appears')
+  assert.equal(event.hex, '0x8C40')
+})
+
+test('a device status object is built the way a device would report it', () => {
+  const raw = encodeDetailedDeviceStatus(
+    [0x8C40, { code: '0x5111', mode: 'disappears' }, '0x5101'], { slots: 5 })
+  assert.equal(raw.length, 15, 'five three-octet slots, two of them empty')
+  const events = decodeDetailedDeviceStatus(raw)
+  assert.equal(events.length, 3, 'the empty slots come back dropped')
+  assert.equal(events[1].mode, 'disappears')
+  // Each code keeps the type Table D.1 gives it: a supply voltage underrun is
+  // a warning, a blown fuse is an error.
+  assert.equal(events[1].type, 'Warning')
+  assert.equal(events[2].type, 'Error')
+})
+
+test('something that is not an EventCode is refused, not rounded', () => {
+  assert.throws(() => encodeDetailedDeviceStatus(['nope']), /not an EventCode/)
+  assert.throws(() => encodeDetailedDeviceStatus([0x10000]), /not an EventCode/)
 })

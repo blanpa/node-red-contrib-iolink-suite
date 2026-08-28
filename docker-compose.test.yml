@@ -18,7 +18,18 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.fake-master
+    environment:
+      # Empty by default: the integration test needs a rack that never moves.
+      # Set it for a demonstration and the ports come from real IODDs with
+      # values that live:
+      #   SIM_PLANT=test/fixtures/simulator-plant.json \
+      #     docker compose -f docker-compose.test.yml up node-red
+      SIM_PLANT: ${SIM_PLANT:-}
     expose:
+      # Deliberately not published: the test harness must not fight whatever
+      # else on the machine holds a port. From the host, run the simulator
+      # directly (npm run simulator); from inside the compose network it is
+      # http://fake-master:8080/, control API included.
       - "8080"
 
   node-red:

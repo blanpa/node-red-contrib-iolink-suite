@@ -41,6 +41,7 @@
   "main": "lib/iodd/index.js",
   "scripts": {
     "test": "node --test test/*.test.js test/iodd/*.test.js",
+    "simulator": "node test/fake-master.js test/fixtures/simulator-plant.json",
     "corpus": "node scripts/fetch-corpus.js",
     "gen:units": "node scripts/gen-units.js",
     "test:docker": "docker compose -f docker-compose.test.yml run --rm --build unit",

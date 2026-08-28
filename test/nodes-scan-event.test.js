@@ -3,7 +3,7 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 const { createAdapter } = require('../lib/adapters')
 const { FakeMaster } = require('./fake-master')
-const { loadNodes, withMaster } = require('./helpers')
+const { loadNodes, withMaster, waitFor } = require('./helpers')
 
 async function setup (file, type, config = {}) {
   const master = await new FakeMaster().listen()
@@ -71,7 +71,11 @@ test('iolink-scan can be told to skip the IODD look-up', async () => {
 async function eventNode (config) {
   const made = await setup('iolink-event.js', 'iolink-event',
     { ports: '1,2', interval: 60000, ...config })
-  await new Promise(resolve => setTimeout(resolve, 50))
+  // The node reports its status at the end of every poll, so a status is the
+  // signal that the baseline has landed. Sleeping a fixed number of
+  // milliseconds instead would be a bet on how busy the machine is.
+  assert.ok(await waitFor(() => made.node.statuses.length > 0),
+    'the node should take its baseline as soon as it is deployed')
   return made
 }
 

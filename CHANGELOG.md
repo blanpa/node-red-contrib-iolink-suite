@@ -13,6 +13,14 @@ All notable changes to this package are documented here. The format follows
   currently signalling with their meaning, type and whether they just appeared.
   Both objects are specified for every IO-Link device, so this needs no vendor
   diagnosis API.
+- The fake master grew into a simulator: a plant file describes which IODD sits
+  on which port and what its values do (`sine`, `ramp`, `triangle`, `square`,
+  `random`), the process data is encoded through that IODD, and a control API
+  (`GET /sim`, `POST /sim/port/{n}`) pulls devices, raises events and pins
+  values while it runs. `npm run simulator`, or `SIM_PLANT=…` on the
+  `fake-master` container.
+- `encodeEventQualifier()` and `encodeDetailedDeviceStatus()`, the counterparts
+  of the decoders, so the diagnosis objects can be built as well as read.
 - Example flows in Node-RED's **Import → Examples** menu: reading a sensor,
   commissioning a master, watching device health, and decoding bytes that never
   came from a master.

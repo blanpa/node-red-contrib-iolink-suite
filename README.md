@@ -154,6 +154,61 @@ docker/       the containers the test suites run in
 examples/     flows offered in Node-RED's Import → Examples menu
 ```
 
+## The simulator
+
+`test/fake-master.js` is a stand-in for an ifm IoT Core master: the same request
+and reply envelope, the same quirks (uppercase hex, a `code` in the body that is
+not the HTTP status). The test suite runs against it, and so can you, for
+building a flow or demonstrating one without a master on the desk.
+
+```bash
+npm run simulator            # a plant on :8080, values that move
+node test/fake-master.js     # the fixed rack the tests use
+
+# Node-RED with the suite installed, wired to the simulator, editor on :1880
+SIM_PLANT=test/fixtures/simulator-plant.json \
+  docker compose -f docker-compose.test.yml up node-red
+```
+
+A **plant file** describes the rack: which IODD sits on which port, and what its
+values are doing. The process data is *encoded through that IODD*, so the bytes
+on the wire are the bytes the device description says they should be, scaling
+included — not a hex string somebody typed.
+
+```json
+"1": {
+  "iodd": "demo-sensor.iodd.xml",
+  "values": {
+    "Temperature":      { "wave": "sine", "min": 18.5, "max": 24.5, "periodMs": 60000 },
+    "Counter":          { "wave": "ramp", "min": 0, "max": 16000, "periodMs": 120000 },
+    "SwitchingSignal1": { "wave": "square", "periodMs": 8000 }
+  },
+  "deviceStatus": 1,
+  "events": ["0x8C40"]
+}
+```
+
+Waves: `sine`, `ramp`, `triangle`, `square`, `random`, `constant` — all
+functions of the clock alone, so a run can be replayed exactly. A bare number,
+string or boolean is a fixed value.
+
+While it runs, the rack can be changed from outside — which is what makes an
+alarm flow demonstrable:
+
+```bash
+curl localhost:8080/sim                                    # the whole rack
+curl -d '{"connected":false}'        localhost:8080/sim/port/1   # pull a device
+curl -d '{"deviceStatus":2,"events":["0x8C10"]}' localhost:8080/sim/port/1
+curl -d '{"values":{"Temperature":42.5}}'        localhost:8080/sim/port/1
+```
+
+The control API lives beside the master's endpoint, never inside it: no message
+a flow sends can reach it *as a flow message*. In the Docker environment the
+simulator is not published to the host — the test harness must not fight
+whatever else holds a port — but it is reachable inside the compose network at
+`http://fake-master:8080/sim`, which an `http request` node can drive: an
+inject node that pulls a device out is a fine way to demonstrate an alarm.
+
 ## Testing
 
 ```bash
