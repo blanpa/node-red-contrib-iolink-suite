@@ -1,0 +1,10 @@
+node_modules/
+coverage/
+*.log
+.DS_Store
+
+# Real vendor IODDs pulled from IODDfinder for tests. Vendor-copyrighted,
+# so they are fetched on demand (npm run corpus) and never committed.
+test/corpus/
+packages/*/test/corpus/
+packages/iodd-parser/test/corpus/

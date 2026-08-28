@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Hand-written fixture for the two constructs that make real IODDs hard:
+   - two <ProcessData> blocks selected by a <Condition> on an ISDU parameter
+   - process data scaling supplied through RecordItemRef on V_ProcessDataInput,
+     in menus selected by <MenuRef><Condition variableId="V_Unit"/>, so the same
+     value is described once in degC and once in degF.
+-->
+<IODevice xmlns="http://www.io-link.com/IODD/2010/10"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <DocumentInfo version="V1.0.0" releaseDate="2026-01-15" copyright="test fixture"/>
+  <ProfileHeader>
+    <ProfileIdentification>IO Device Profile</ProfileIdentification>
+    <ProfileRevision>1.1</ProfileRevision>
+    <ProfileName>Device Profile for IO-Link Devices</ProfileName>
+    <ProfileSource>IO-Link Consortium</ProfileSource>
+    <ProfileClassID>Device</ProfileClassID>
+    <ISO15745Reference>
+      <ISO15745Part>1</ISO15745Part><ISO15745Edition>1</ISO15745Edition>
+      <ProfileTechnology>IODD</ProfileTechnology>
+    </ISO15745Reference>
+  </ProfileHeader>
+  <ProfileBody>
+    <DeviceIdentity vendorId="999" vendorName="Test Instruments GmbH" deviceId="4243">
+      <DeviceName textId="TI_DeviceName"/>
+      <DeviceVariantCollection>
+        <DeviceVariant productId="DEMO-200"><Name textId="TI_ProductName"/></DeviceVariant>
+      </DeviceVariantCollection>
+    </DeviceIdentity>
+    <DeviceFunction>
+      <VariableCollection>
+        <StdVariableRef id="V_ProcessDataInput"/>
+        <Variable id="V_Layout" index="200" accessRights="rw" defaultValue="0">
+          <Datatype xsi:type="UIntegerT" bitLength="8">
+            <SingleValue value="0"><Name textId="TI_Layout_Compact"/></SingleValue>
+            <SingleValue value="1"><Name textId="TI_Layout_Extended"/></SingleValue>
+          </Datatype>
+          <Name textId="TI_Layout_Name"/>
+        </Variable>
+        <Variable id="V_Unit" index="201" accessRights="rw" defaultValue="0">
+          <Datatype xsi:type="UIntegerT" bitLength="8">
+            <SingleValue value="0"><Name textId="TI_Unit_C"/></SingleValue>
+            <SingleValue value="1"><Name textId="TI_Unit_F"/></SingleValue>
+          </Datatype>
+          <Name textId="TI_Unit_Name"/>
+        </Variable>
+      </VariableCollection>
+
+      <ProcessDataCollection>
+        <ProcessData id="PD_Compact">
+          <Condition variableId="V_Layout" value="0"/>
+          <ProcessDataIn id="PDI_Compact" bitLength="16">
+            <Datatype xsi:type="RecordT" bitLength="16" subindexAccessSupported="false">
+              <RecordItem subindex="1" bitOffset="0">
+                <SimpleDatatype xsi:type="IntegerT" bitLength="16"/>
+                <Name textId="TI_PD_Temperature"/>
+              </RecordItem>
+            </Datatype>
+            <Name textId="TI_PD_In"/>
+          </ProcessDataIn>
+        </ProcessData>
+        <ProcessData id="PD_Extended">
+          <Condition variableId="V_Layout" value="1"/>
+          <ProcessDataIn id="PDI_Extended" bitLength="32">
+            <Datatype xsi:type="RecordT" bitLength="32" subindexAccessSupported="false">
+              <RecordItem subindex="1" bitOffset="16">
+                <SimpleDatatype xsi:type="IntegerT" bitLength="16"/>
+                <Name textId="TI_PD_Temperature"/>
+              </RecordItem>
+              <RecordItem subindex="2" bitOffset="0">
+                <SimpleDatatype xsi:type="UIntegerT" bitLength="16"/>
+                <Name textId="TI_PD_Humidity"/>
+              </RecordItem>
+            </Datatype>
+            <Name textId="TI_PD_In"/>
+          </ProcessDataIn>
+        </ProcessData>
+      </ProcessDataCollection>
+
+      <UserInterface>
+        <MenuCollection>
+          <Menu id="M_Root">
+            <Name textId="TI_M_Observation"/>
+            <MenuRef menuId="M_Observation_C"><Condition variableId="V_Unit" value="0"/></MenuRef>
+            <MenuRef menuId="M_Observation_F"><Condition variableId="V_Unit" value="1"/></MenuRef>
+          </Menu>
+          <Menu id="M_Observation_C">
+            <Name textId="TI_M_Observation"/>
+            <RecordItemRef variableId="V_ProcessDataInput" subindex="1"
+                           gradient="0.1" offset="0" unitCode="1001" displayFormat="Dec.1"/>
+          </Menu>
+          <Menu id="M_Observation_F">
+            <Name textId="TI_M_Observation"/>
+            <RecordItemRef variableId="V_ProcessDataInput" subindex="1"
+                           gradient="0.18" offset="32" unitCode="1002" displayFormat="Dec.1"/>
+          </Menu>
+        </MenuCollection>
+        <ObserverRoleMenuSet>
+          <ObservationMenu menuId="M_Root"/>
+        </ObserverRoleMenuSet>
+      </UserInterface>
+    </DeviceFunction>
+  </ProfileBody>
+  <CommNetworkProfile xsi:type="IOLinkCommNetworkProfileT" iolinkRevision="V1.1">
+    <TransportLayers>
+      <PhysicalLayer bitrate="COM2" minCycleTime="2300" sioSupported="false" mSequenceCapability="17"/>
+    </TransportLayers>
+  </CommNetworkProfile>
+  <ExternalTextCollection>
+    <PrimaryLanguage xml:lang="en">
+      <Text id="TI_DeviceName" value="Demo Multi-Layout Sensor"/>
+      <Text id="TI_ProductName" value="DEMO-200"/>
+      <Text id="TI_PD_In" value="Process Data Input"/>
+      <Text id="TI_PD_Temperature" value="Temperature"/>
+      <Text id="TI_PD_Humidity" value="Humidity"/>
+      <Text id="TI_Layout_Name" value="Process data layout"/>
+      <Text id="TI_Layout_Compact" value="Compact"/>
+      <Text id="TI_Layout_Extended" value="Extended"/>
+      <Text id="TI_Unit_Name" value="Display unit"/>
+      <Text id="TI_Unit_C" value="Celsius"/>
+      <Text id="TI_Unit_F" value="Fahrenheit"/>
+      <Text id="TI_M_Observation" value="Observation"/>
+    </PrimaryLanguage>
+  </ExternalTextCollection>
+</IODevice>
