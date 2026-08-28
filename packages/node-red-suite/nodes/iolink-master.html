@@ -1,0 +1,176 @@
+<script type="text/javascript">
+  RED.nodes.registerType('iolink-master', {
+    category: 'config',
+    defaults: {
+      name: { value: '' },
+      profile: { value: 'ifm', required: true },
+      host: { value: '', required: false },
+      httpPort: { value: '' },
+      url: { value: '' },
+      tls: { value: false },
+      timeout: { value: 5000, validate: RED.validators.number() },
+      ports: { value: '1,2,3,4,5,6,7,8' },
+      language: { value: 'en' },
+      keyStyle: { value: 'preserve' },
+      ioddDir: { value: '' },
+      ioddCacheDir: { value: '' },
+      offline: { value: false },
+      paths: { value: '' },
+      valuePath: { value: '' }
+    },
+    credentials: {
+      user: { type: 'text' },
+      password: { type: 'password' }
+    },
+    label: function () {
+      return this.name || this.host || this.url || 'IO-Link master'
+    },
+    oneditprepare: function () {
+      const node = this
+      $.getJSON('iolink-suite/profiles', function (profiles) {
+        const select = $('#node-config-input-profile').empty()
+        profiles.forEach(function (p) {
+          select.append($('<option>').val(p.id).text(p.label + (p.verified ? '' : ' — unverified')))
+        })
+        select.val(node.profile || 'ifm').trigger('change')
+      })
+      $('#node-config-input-profile').on('change', function () {
+        $('.iolink-generic-only').toggle($(this).val() === 'generic')
+      })
+      $('#iolink-test').on('click', function () {
+        const status = $('#iolink-test-result').text('testing…').css('color', '')
+        // The node must exist on the server before it can be asked anything,
+        // so the dialog is deployed-state dependent; say so rather than fail.
+        $.getJSON('iolink-suite/scan/' + node.id)
+          .done(function (ports) {
+            const used = ports.filter(function (p) { return p.connected }).length
+            status.css('color', '#4a4').text(used + ' of ' + ports.length + ' ports in use')
+          })
+          .fail(function (xhr) {
+            const body = xhr.responseJSON || {}
+            status.css('color', '#a44')
+              .text(body.error || 'failed — deploy the master once before testing')
+          })
+      })
+    }
+  })
+</script>
+
+<script type="text/html" data-template-name="iolink-master">
+  <div class="form-row">
+    <label for="node-config-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-config-input-name" placeholder="Line 3 master">
+  </div>
+  <div class="form-row">
+    <label for="node-config-input-profile"><i class="fa fa-plug"></i> Profile</label>
+    <select id="node-config-input-profile"></select>
+  </div>
+  <div class="form-row">
+    <label for="node-config-input-host"><i class="fa fa-globe"></i> Host</label>
+    <input type="text" id="node-config-input-host" placeholder="192.168.1.50">
+  </div>
+  <div class="form-row">
+    <label for="node-config-input-httpPort"><i class="fa fa-random"></i> HTTP port</label>
+    <input type="text" id="node-config-input-httpPort" placeholder="80">
+  </div>
+  <div class="form-row">
+    <label for="node-config-input-tls"><i class="fa fa-lock"></i> HTTPS</label>
+    <input type="checkbox" id="node-config-input-tls" style="width:auto">
+    <span>Use TLS</span>
+  </div>
+  <div class="form-row">
+    <label for="node-config-input-user"><i class="fa fa-user"></i> User</label>
+    <input type="text" id="node-config-input-user" placeholder="leave empty if unsecured">
+  </div>
+  <div class="form-row">
+    <label for="node-config-input-password"><i class="fa fa-key"></i> Password</label>
+    <input type="password" id="node-config-input-password">
+  </div>
+  <div class="form-row">
+    <label for="node-config-input-ports"><i class="fa fa-list-ol"></i> Ports</label>
+    <input type="text" id="node-config-input-ports" placeholder="1,2,3,4">
+  </div>
+  <div class="form-row">
+    <label for="node-config-input-timeout"><i class="fa fa-clock-o"></i> Timeout</label>
+    <input type="text" id="node-config-input-timeout" placeholder="5000"> ms
+  </div>
+
+  <hr>
+  <div class="form-row">
+    <label for="node-config-input-language"><i class="fa fa-language"></i> Language</label>
+    <input type="text" id="node-config-input-language" placeholder="en" style="width:80px">
+    <span style="color:#888">IODD text language, e.g. <code>de</code></span>
+  </div>
+  <div class="form-row">
+    <label for="node-config-input-keyStyle"><i class="fa fa-font"></i> Key style</label>
+    <select id="node-config-input-keyStyle" style="width:200px">
+      <option value="preserve">Preserve IODD names</option>
+      <option value="camel">camelCase</option>
+      <option value="pascal">PascalCase</option>
+      <option value="snake">snake_case</option>
+      <option value="kebab">kebab-case</option>
+    </select>
+  </div>
+  <div class="form-row">
+    <label for="node-config-input-ioddDir"><i class="fa fa-folder-open"></i> IODD folder</label>
+    <input type="text" id="node-config-input-ioddDir" placeholder="/data/iodd">
+  </div>
+  <div class="form-row">
+    <label for="node-config-input-ioddCacheDir"><i class="fa fa-database"></i> Cache</label>
+    <input type="text" id="node-config-input-ioddCacheDir" placeholder="~/.cache/iodd-parser">
+  </div>
+  <div class="form-row">
+    <label for="node-config-input-offline"><i class="fa fa-plane"></i> Offline</label>
+    <input type="checkbox" id="node-config-input-offline" style="width:auto">
+    <span>Never contact IODDfinder</span>
+  </div>
+
+  <div class="iolink-generic-only" style="display:none">
+    <hr>
+    <div class="form-row">
+      <label for="node-config-input-paths"><i class="fa fa-code"></i> Paths</label>
+      <input type="text" id="node-config-input-paths"
+             placeholder='{"readProcessDataIn":"GET /iolink/port/{port}/pdin"}'>
+    </div>
+    <div class="form-row">
+      <label for="node-config-input-valuePath"><i class="fa fa-crosshairs"></i> Value field</label>
+      <input type="text" id="node-config-input-valuePath" placeholder="data.value">
+    </div>
+  </div>
+
+  <hr>
+  <div class="form-row">
+    <button type="button" class="red-ui-button" id="iolink-test">
+      <i class="fa fa-search"></i> Test connection
+    </button>
+    <span id="iolink-test-result" style="margin-left:10px"></span>
+  </div>
+</script>
+
+<script type="text/html" data-help-name="iolink-master">
+  <p>Connection to one IO-Link master. Every read, write, parameter and event node
+     refers to a master node, and they share its IODD cache.</p>
+
+  <h3>Profiles</h3>
+  <dl class="message-properties">
+    <dt>ifm IoT Core</dt>
+    <dd>ifm AL13xx / AL19xx / AL2xxx. Verified against the documented JSON API.</dd>
+    <dt>Generic HTTP/JSON</dt>
+    <dd>For masters with a REST API of the same shape but different paths —
+        Balluff, Turck and others. Configure the path templates
+        (<code>{port}</code>, <code>{index}</code>, <code>{subindex}</code>,
+        <code>{value}</code>) and which field of the reply carries the value.
+        A working configuration is worth contributing back as a preset.</dd>
+  </dl>
+
+  <h3>IODDs</h3>
+  <p>IODDs are looked up automatically from the vendorId and deviceId the device
+     reports, then cached on disk. Files in the <b>IODD folder</b> take priority,
+     so a plant can pin a specific IODD. Tick <b>Offline</b> for machines with no
+     internet: only the folder and the cache are then used.</p>
+
+  <h3>Test connection</h3>
+  <p>Scans the master's ports and reports how many are in use. The master must
+     have been deployed at least once, since the test runs against the deployed
+     configuration.</p>
+</script>

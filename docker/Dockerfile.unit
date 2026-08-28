@@ -1,0 +1,14 @@
+# Unit tests in a clean container: the whole suite, no hardware, no network.
+FROM node:20-alpine
+
+WORKDIR /src
+
+# The manifests first, so the dependency layer survives an edit to the source.
+COPY package.json package-lock.json ./
+COPY packages/iodd-parser/package.json packages/iodd-parser/
+COPY packages/node-red-suite/package.json packages/node-red-suite/
+RUN npm install --workspaces --include-workspace-root --no-audit --no-fund
+
+COPY . .
+
+CMD ["npm", "test"]

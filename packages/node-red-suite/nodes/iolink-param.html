@@ -1,0 +1,142 @@
+<script type="text/javascript">
+  RED.nodes.registerType('iolink-param', {
+    category: 'IO-Link',
+    color: '#c0deed',
+    defaults: {
+      name: { value: '' },
+      master: { value: '', type: 'iolink-master', required: true },
+      port: { value: '1', required: true },
+      portType: { value: 'num' },
+      action: { value: 'read' },
+      parameter: { value: '' },
+      parameterType: { value: 'str' },
+      subindex: { value: 0 },
+      identityTtl: { value: 30000 },
+      vendorId: { value: '' },
+      deviceId: { value: '' }
+    },
+    inputs: 1,
+    outputs: 1,
+    icon: 'font-awesome/fa-sliders',
+    label: function () {
+      return this.name || ((this.action || 'read') + ' ' + (this.parameter || 'parameter'))
+    },
+    oneditprepare: function () {
+      const node = this
+      $('#node-input-port').typedInput({
+        default: 'num', typeField: '#node-input-portType',
+        types: ['num', 'msg', 'flow', 'global', 'env']
+      })
+      $('#node-input-parameter').typedInput({
+        default: 'str', typeField: '#node-input-parameterType',
+        types: ['str', 'msg', 'flow', 'global', 'env']
+      })
+      $('#iolink-load').on('click', function () {
+        const masterId = $('#node-input-master').val()
+        const port = $('#node-input-port').val()
+        const status = $('#iolink-load-status').text('loading…').css('color', '')
+        if (!masterId || masterId === '_ADD_') {
+          return status.css('color', '#a44').text('choose and deploy a master first')
+        }
+        $.getJSON('iolink-suite/parameters/' + masterId + '/' + encodeURIComponent(port))
+          .done(function (result) {
+            status.css('color', '#4a4').text(
+              result.device.vendorName + ' — ' + result.parameters.length + ' parameters')
+            const list = $('#iolink-parameters').empty()
+            result.parameters.forEach(function (p) {
+              const label = p.index + '  ' + p.name +
+                '  (' + p.access + (p.unit ? ', ' + p.unit : '') + ')' +
+                (p.standard ? '  ·  standard' : '')
+              $('<div>').css({ padding: '2px 0', cursor: 'pointer' })
+                .text(label)
+                .on('click', function () {
+                  $('#node-input-parameter').typedInput('type', 'str')
+                  $('#node-input-parameter').typedInput('value', p.name)
+                })
+                .appendTo(list)
+            })
+          })
+          .fail(function (xhr) {
+            const body = xhr.responseJSON || {}
+            status.css('color', '#a44').text(body.error || 'could not load parameters')
+          })
+      })
+    }
+  })
+</script>
+
+<script type="text/html" data-template-name="iolink-param">
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-input-name">
+  </div>
+  <div class="form-row">
+    <label for="node-input-master"><i class="fa fa-server"></i> Master</label>
+    <input type="text" id="node-input-master">
+  </div>
+  <div class="form-row">
+    <label for="node-input-port"><i class="fa fa-plug"></i> Port</label>
+    <input type="text" id="node-input-port">
+    <input type="hidden" id="node-input-portType">
+  </div>
+  <div class="form-row">
+    <label for="node-input-action"><i class="fa fa-exchange"></i> Action</label>
+    <select id="node-input-action" style="width:70%">
+      <option value="read">Read</option>
+      <option value="write">Write</option>
+    </select>
+  </div>
+  <div class="form-row">
+    <button type="button" class="red-ui-button" id="iolink-load">
+      <i class="fa fa-list"></i> Load parameters
+    </button>
+    <span id="iolink-load-status" style="margin-left:10px"></span>
+  </div>
+  <div class="form-row">
+    <div id="iolink-parameters"
+         style="max-height:220px;overflow:auto;border:1px solid #ccc;border-radius:4px;padding:6px">
+      <div class="form-tips">Load the device's parameter list, then click one to select it.</div>
+    </div>
+  </div>
+  <div class="form-row">
+    <label for="node-input-parameter"><i class="fa fa-key"></i> Parameter</label>
+    <input type="text" id="node-input-parameter" placeholder="Switch point, or an index">
+    <input type="hidden" id="node-input-parameterType">
+  </div>
+  <div class="form-row">
+    <label for="node-input-subindex"><i class="fa fa-list-ol"></i> Subindex</label>
+    <input type="text" id="node-input-subindex" style="width:100px" placeholder="0">
+    <span style="color:#888">0 addresses the whole object</span>
+  </div>
+</script>
+
+<script type="text/html" data-help-name="iolink-param">
+  <p>Reads and writes ISDU parameters by their name in the IODD instead of by
+     index and subindex, and converts the raw bytes into engineering values.</p>
+
+  <h3>Selecting a parameter</h3>
+  <p>Press <b>Load parameters</b> and click one, or type a name or an index. The
+     name is matched against the IODD in the language the master node is set to.
+     Both vendor parameters and the specification's standard objects
+     (SerialNumber, ApplicationSpecificTag, …) are listed.</p>
+
+  <h3>Input</h3>
+  <dl class="message-properties">
+    <dt>payload <span class="property-type">any</span></dt>
+    <dd>For a write: the value, in engineering units. Enumerated parameters accept
+        the IODD's own wording.</dd>
+    <dt>parameter <span class="property-type">string | number</span></dt>
+    <dd>Overrides the configured parameter.</dd>
+    <dt>subindex <span class="property-type">number</span></dt>
+    <dd>Overrides the configured subindex.</dd>
+    <dt>action <span class="property-type">string</span></dt>
+    <dd><code>read</code> or <code>write</code>, overriding the configuration.</dd>
+  </dl>
+
+  <h3>Output</h3>
+  <p><code>msg.payload</code> carries the converted value, <code>msg.meta</code> its
+     unit, range and enum text, and <code>msg.iolink</code> the index, subindex and
+     raw hex actually exchanged.</p>
+  <p>Writing a parameter the IODD marks read-only fails before anything is sent to
+     the device, as does a value outside its declared range.</p>
+</script>

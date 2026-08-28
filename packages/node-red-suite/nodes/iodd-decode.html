@@ -1,0 +1,133 @@
+<script type="text/javascript">
+  RED.nodes.registerType('iodd-decode', {
+    category: 'IO-Link',
+    color: '#a6d5b0',
+    defaults: {
+      name: { value: '' },
+      iodd: { value: '' },
+      mode: { value: 'decode' },
+      direction: { value: 'in' },
+      variant: { value: '' },
+      conditions: { value: '' },
+      language: { value: 'en' },
+      keyStyle: { value: 'preserve' },
+      enums: { value: 'text' },
+      strictLength: { value: false }
+    },
+    inputs: 1,
+    outputs: 1,
+    icon: 'font-awesome/fa-file-code-o',
+    label: function () {
+      return this.name || (this.mode === 'encode' ? 'encode IODD' : 'decode IODD')
+    },
+    oneditprepare: function () {
+      const toggle = function () {
+        const encoding = $('#node-input-mode').val() === 'encode'
+        $('#iolink-row-direction').toggle(!encoding)
+        $('#iolink-row-enums').toggle(!encoding)
+        $('#iolink-row-strict').toggle(!encoding)
+      }
+      $('#node-input-mode').on('change', toggle)
+      toggle()
+    }
+  })
+</script>
+
+<script type="text/html" data-template-name="iodd-decode">
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-input-name">
+  </div>
+  <div class="form-row">
+    <label for="node-input-iodd"><i class="fa fa-file-o"></i> IODD</label>
+    <input type="text" id="node-input-iodd" placeholder="/path/to/Vendor-Sensor-IODD1.1.xml or .zip">
+  </div>
+  <div class="form-row">
+    <label for="node-input-mode"><i class="fa fa-exchange"></i> Mode</label>
+    <select id="node-input-mode" style="width:70%">
+      <option value="decode">Decode — bytes to values</option>
+      <option value="encode">Encode — values to bytes</option>
+    </select>
+  </div>
+  <div class="form-row" id="iolink-row-direction">
+    <label for="node-input-direction"><i class="fa fa-arrows-h"></i> Data</label>
+    <select id="node-input-direction" style="width:70%">
+      <option value="in">Process data in — from the device</option>
+      <option value="out">Process data out — to the device</option>
+    </select>
+  </div>
+  <div class="form-row">
+    <label for="node-input-language"><i class="fa fa-language"></i> Language</label>
+    <input type="text" id="node-input-language" style="width:100px" placeholder="en">
+    <span style="color:#888">falls back to English</span>
+  </div>
+  <div class="form-row">
+    <label for="node-input-keyStyle"><i class="fa fa-font"></i> Keys</label>
+    <select id="node-input-keyStyle" style="width:70%">
+      <option value="preserve">As written in the IODD</option>
+      <option value="camel">camelCase</option>
+      <option value="snake">snake_case</option>
+    </select>
+  </div>
+  <div class="form-row" id="iolink-row-enums">
+    <label for="node-input-enums"><i class="fa fa-list"></i> Enums</label>
+    <select id="node-input-enums" style="width:70%">
+      <option value="text">The IODD's wording</option>
+      <option value="number">The numeric value</option>
+    </select>
+  </div>
+  <div class="form-row">
+    <label for="node-input-variant"><i class="fa fa-code-fork"></i> Variant</label>
+    <input type="text" id="node-input-variant" placeholder="only if the device has several layouts">
+  </div>
+  <div class="form-row">
+    <label for="node-input-conditions"><i class="fa fa-sliders"></i> Conditions</label>
+    <input type="text" id="node-input-conditions" placeholder='{"V_Unit": 1}'>
+  </div>
+  <div class="form-row" id="iolink-row-strict">
+    <label for="node-input-strictLength" style="width:auto">
+      <input type="checkbox" id="node-input-strictLength" style="width:auto;vertical-align:top">
+      Reject data longer than the layout
+    </label>
+  </div>
+  <div class="form-tips">
+    Conditions resolve devices whose layout or whose scaling depends on a
+    parameter — a sensor that reports °C or °F, or bar or psi, depending on how it
+    is configured. Give the parameter values here and the node decodes accordingly
+    instead of guessing.
+  </div>
+</script>
+
+<script type="text/html" data-help-name="iodd-decode">
+  <p>Turns raw IO-Link process data into named engineering values using an IODD,
+     with no master connection involved.</p>
+  <p>Use it when the bytes already reach Node-RED some other way — PROFINET,
+     EtherNet/IP, Modbus, OPC UA, an MQTT bridge, or a PLC that forwards the
+     process data word. The decoding is the same one the rest of this suite uses.</p>
+
+  <h3>Input</h3>
+  <dl class="message-properties">
+    <dt>payload <span class="property-type">string | Buffer | array</span></dt>
+    <dd>Decoding: the raw process data, as a hex string or bytes.
+        Encoding: an object of values keyed by datapoint name.</dd>
+    <dt class="optional">iodd <span class="property-type">string</span></dt>
+    <dd>An IODD for this message only — a file path, or the XML itself. One node
+        can then serve several device types driven by the flow.</dd>
+    <dt class="optional">direction <span class="property-type">string</span></dt>
+    <dd><code>in</code> or <code>out</code>.</dd>
+    <dt class="optional">variant / conditions</dt>
+    <dd>Override the configured process data variant and parameter values.</dd>
+  </dl>
+
+  <h3>Output</h3>
+  <p>Decoding gives <code>msg.payload</code> with one entry per datapoint,
+     <code>msg.meta</code> with the unit, type and range of each, <code>msg.device</code>
+     with the identity out of the IODD, and <code>msg.iolink</code> with the raw hex
+     and the layout used. Encoding gives the hex string to send.</p>
+
+  <h3>When it refuses</h3>
+  <p>Short data, an unknown datapoint name, a value outside its declared range and
+     an unresolvable device variant are all errors with the offending name in the
+     message. That is deliberate: a wrong number that looks plausible is worse in a
+     plant than a stopped flow.</p>
+</script>

@@ -13,6 +13,9 @@
   "scripts": {
     "test": "npm run test --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
-    "corpus": "node packages/iodd-parser/scripts/fetch-corpus.js"
+    "corpus": "node packages/iodd-parser/scripts/fetch-corpus.js",
+    "test:docker": "docker compose -f docker-compose.test.yml run --rm --build unit",
+    "test:integration": "docker compose -f docker-compose.test.yml run --rm --build integration",
+    "test:all": "npm run test:docker && npm run test:integration"
   }
 }

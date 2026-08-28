@@ -1,0 +1,11 @@
+# The fake ifm IoT Core master, as a standalone service.
+# It speaks the real request and reply envelope, so a whole Node-RED flow can
+# be exercised without an IO-Link master on the desk.
+FROM node:20-alpine
+
+WORKDIR /app
+COPY packages/node-red-suite/test/fake-master.js ./
+
+ENV PORT=8080
+EXPOSE 8080
+CMD ["node", "fake-master.js"]

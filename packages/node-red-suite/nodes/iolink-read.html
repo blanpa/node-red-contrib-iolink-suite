@@ -1,0 +1,245 @@
+<script type="text/javascript">
+  RED.nodes.registerType('iolink-read', {
+    category: 'IO-Link',
+    color: '#c0deed',
+    defaults: {
+      name: { value: '' },
+      master: { value: '', type: 'iolink-master', required: true },
+      port: { value: '1', required: true },
+      portType: { value: 'num' },
+      values: { value: [] },
+      variant: { value: '' },
+      conditions: { value: '' },
+      enums: { value: 'value' },
+      output: { value: 'single' },
+      topicPrefix: { value: '' },
+      interval: { value: 0 },
+      identityTtl: { value: 30000 },
+      vendorId: { value: '' },
+      deviceId: { value: '' }
+    },
+    inputs: 1,
+    outputs: 1,
+    icon: 'font-awesome/fa-thermometer-half',
+    label: function () {
+      return this.name || ('read port ' + (this.port || '?'))
+    },
+    oneditprepare: function () {
+      const node = this
+      $('#node-input-port').typedInput({
+        default: 'num',
+        typeField: '#node-input-portType',
+        types: ['num', 'msg', 'flow', 'global', 'env']
+      })
+      $('#node-input-output').on('change', function () {
+        $('.iolink-split-only').toggle($(this).val() === 'split')
+      }).trigger('change')
+
+      const list = $('#iolink-values')
+      let known = []
+
+      function renderChecklist (items) {
+        known = items
+        list.empty()
+        if (!items.length) {
+          list.append($('<div class="form-tips">').text('No values found for this port.'))
+          return
+        }
+        const selected = node.values || []
+        // No selection means "everything", which is the useful default: a fresh
+        // node should emit the whole block rather than nothing.
+        const all = selected.length === 0
+        items.forEach(function (item) {
+          const id = 'iolink-val-' + item.key.replace(/\W/g, '_')
+          const row = $('<div>').css({ padding: '2px 0' })
+          $('<input type="checkbox">')
+            .attr('id', id).css({ width: 'auto', marginRight: '6px' })
+            .prop('checked', all || selected.indexOf(item.key) >= 0)
+            .data('key', item.key)
+            .appendTo(row)
+          const label = $('<label>').attr('for', id)
+            .css({ width: 'auto', display: 'inline' })
+            .text(item.name || item.key)
+          if (item.unit) label.append($('<span>').css({ color: '#888' }).text(' [' + item.unit + ']'))
+          label.append($('<span>').css({ color: '#aaa', fontSize: '0.85em' })
+            .text('  ' + item.type + item.bitLength + ' @bit ' + item.bitOffset))
+          label.appendTo(row)
+          if (item.scalingAmbiguous) {
+            $('<div>').css({ color: '#b8860b', fontSize: '0.85em', marginLeft: '20px' })
+              .text('scaling depends on a parameter (' +
+                item.scalingAmbiguous.map(function (a) { return a.unit || a.gradient }).join(' / ') +
+                ') — set it under Conditions, otherwise this value stays raw')
+              .appendTo(row)
+          }
+          if (item.description) {
+            $('<div>').css({ color: '#999', fontSize: '0.85em', marginLeft: '20px' })
+              .text(item.description).appendTo(row)
+          }
+          row.appendTo(list)
+        })
+      }
+
+      $('#iolink-scan').on('click', function () {
+        const masterId = $('#node-input-master').val()
+        const port = $('#node-input-port').val()
+        const status = $('#iolink-scan-status').text('scanning…').css('color', '')
+        if (!masterId || masterId === '_ADD_') {
+          return status.css('color', '#a44').text('choose and deploy a master first')
+        }
+        $.getJSON('iolink-suite/datapoints/' + masterId + '/' + encodeURIComponent(port) +
+                  '?direction=in' + ($('#node-input-variant').val()
+                    ? '&variant=' + encodeURIComponent($('#node-input-variant').val()) : ''))
+          .done(function (result) {
+            if (result.error) {
+              status.css('color', '#b8860b').text(result.error)
+            } else {
+              status.css('color', '#4a4').text(
+                result.device.vendorName + ' ' + result.device.productName +
+                ' — ' + result.layout.octetLength + ' octets')
+            }
+            const select = $('#node-input-variant')
+            const current = select.val()
+            select.empty().append($('<option>').val('').text('(automatic)'))
+            ;(result.variants || []).forEach(function (v) {
+              const text = v.id + (v.condition
+                ? ' — when ' + v.condition.variableId + ' = ' + v.condition.value : '')
+              select.append($('<option>').val(v.id).text(text))
+            })
+            select.val(current)
+            $('.iolink-variant-row').toggle((result.variants || []).length > 1)
+            renderChecklist(result.items || [])
+          })
+          .fail(function (xhr) {
+            const body = xhr.responseJSON || {}
+            status.css('color', '#a44').text(body.error || 'scan failed')
+          })
+      })
+
+      $('#iolink-select-all').on('click', function () {
+        list.find('input[type=checkbox]').prop('checked', true)
+      })
+      $('#iolink-select-none').on('click', function () {
+        list.find('input[type=checkbox]').prop('checked', false)
+      })
+
+      if (node.values && node.values.length) {
+        renderChecklist(node.values.map(function (k) {
+          return { key: k, name: k, type: '', bitLength: '', bitOffset: '' }
+        }))
+        $('#iolink-scan-status').css('color', '#888')
+          .text('showing the saved selection — scan to refresh from the device')
+      }
+    },
+    oneditsave: function () {
+      const boxes = $('#iolink-values input[type=checkbox]')
+      const checked = boxes.filter(':checked')
+      // All ticked is stored as "no filter", so a later firmware change that
+      // adds a value does not silently drop it from the output.
+      this.values = (boxes.length && checked.length === boxes.length)
+        ? []
+        : checked.map(function () { return $(this).data('key') }).get()
+    }
+  })
+</script>
+
+<script type="text/html" data-template-name="iolink-read">
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-input-name">
+  </div>
+  <div class="form-row">
+    <label for="node-input-master"><i class="fa fa-server"></i> Master</label>
+    <input type="text" id="node-input-master">
+  </div>
+  <div class="form-row">
+    <label for="node-input-port"><i class="fa fa-plug"></i> Port</label>
+    <input type="text" id="node-input-port">
+    <input type="hidden" id="node-input-portType">
+  </div>
+
+  <div class="form-row">
+    <button type="button" class="red-ui-button" id="iolink-scan">
+      <i class="fa fa-search"></i> Scan port
+    </button>
+    <button type="button" class="red-ui-button" id="iolink-select-all">All</button>
+    <button type="button" class="red-ui-button" id="iolink-select-none">None</button>
+    <span id="iolink-scan-status" style="margin-left:10px"></span>
+  </div>
+  <div class="form-row">
+    <div id="iolink-values"
+         style="max-height:260px;overflow:auto;border:1px solid #ccc;border-radius:4px;padding:6px">
+      <div class="form-tips">Press <b>Scan port</b> to read the device's IODD and list its values.</div>
+    </div>
+  </div>
+
+  <div class="form-row iolink-variant-row" style="display:none">
+    <label for="node-input-variant"><i class="fa fa-code-fork"></i> Layout</label>
+    <select id="node-input-variant" style="width:70%"></select>
+  </div>
+  <div class="form-row">
+    <label for="node-input-conditions"><i class="fa fa-sliders"></i> Conditions</label>
+    <input type="text" id="node-input-conditions" placeholder='{"V_uni": 1}'>
+  </div>
+  <div class="form-row">
+    <label for="node-input-enums"><i class="fa fa-list"></i> Enums</label>
+    <select id="node-input-enums" style="width:70%">
+      <option value="value">Value, with the text in meta</option>
+      <option value="text">Text in the payload</option>
+    </select>
+  </div>
+  <div class="form-row">
+    <label for="node-input-output"><i class="fa fa-sign-out"></i> Output</label>
+    <select id="node-input-output" style="width:70%">
+      <option value="single">One message, all values</option>
+      <option value="split">One message per value</option>
+    </select>
+  </div>
+  <div class="form-row iolink-split-only">
+    <label for="node-input-topicPrefix"><i class="fa fa-hashtag"></i> Topic prefix</label>
+    <input type="text" id="node-input-topicPrefix" placeholder="iolink/port1">
+  </div>
+  <div class="form-row">
+    <label for="node-input-interval"><i class="fa fa-repeat"></i> Poll</label>
+    <input type="text" id="node-input-interval" style="width:100px" placeholder="0"> ms
+    <span style="color:#888">0 = only on input</span>
+  </div>
+</script>
+
+<script type="text/html" data-help-name="iolink-read">
+  <p>Reads a port's process data and decodes it through the connected device's
+     IODD. No bit offsets by hand.</p>
+
+  <h3>Scan port</h3>
+  <p>Asks the master which device is on the port, fetches its IODD, and lists the
+     available values with their names and units. Tick what you want. Leave
+     everything ticked to emit the whole block.</p>
+
+  <h3>Outputs</h3>
+  <dl class="message-properties">
+    <dt>payload <span class="property-type">object</span></dt>
+    <dd>Flat <code>name → value</code>, already scaled into engineering units.</dd>
+    <dt>meta <span class="property-type">object</span></dt>
+    <dd>Per value: unit, type, range, the raw count, and the resolved enum text.
+        Kept beside the payload, not inside it, so the payload can be forwarded
+        to MQTT or a historian unchanged.</dd>
+    <dt>device <span class="property-type">object</span></dt>
+    <dd>Vendor, product, ids, serial and port.</dd>
+    <dt>iolink <span class="property-type">object</span></dt>
+    <dd>The raw hex, the layout used, and any IODD warnings.</dd>
+  </dl>
+  <p>In <b>one message per value</b> mode the node emits one message per value
+     with <code>msg.topic</code> set, which drops straight into an MQTT out node.</p>
+
+  <h3>Layouts and conditions</h3>
+  <p>Some devices change their process data layout, or the unit they report in,
+     according to a parameter. Where that is the case the node cannot know which
+     applies: pick the <b>Layout</b> explicitly, and state the parameter value
+     under <b>Conditions</b> (for example <code>{"V_uni": 1}</code> for a sensor
+     set to bar). Until then the affected values are passed through unscaled
+     rather than reported in the wrong unit.</p>
+
+  <h3>Polling</h3>
+  <p>With a poll interval the node reads on its own. A tick is skipped rather
+     than queued if the previous read is still running, so a slow master cannot
+     build a backlog.</p>
+</script>

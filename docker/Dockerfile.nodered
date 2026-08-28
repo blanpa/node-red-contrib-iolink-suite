@@ -1,0 +1,30 @@
+# The suite installed into the official Node-RED image, from the tarballs npm
+# would actually publish. Anything left out of package.json "files" fails here
+# and not on a user's machine.
+FROM node:20-alpine AS pack
+
+WORKDIR /src
+COPY . .
+RUN mkdir -p /packed \
+ && npm pack --workspace iodd-parser --pack-destination /packed \
+ && npm pack --workspace node-red-contrib-iolink-suite --pack-destination /packed
+
+
+FROM nodered/node-red:4.1
+
+COPY --from=pack /packed/*.tgz /tmp/packed/
+COPY docker/flows.json /data/flows.json
+COPY packages/node-red-suite/test/fixtures/demo-sensor.iodd.xml /data/iodd/
+
+USER root
+RUN chown -R node-red:node-red /data
+USER node-red
+
+# The suite is installed the way a user installs it: into the Node-RED
+# userDir's palette, resolving its own dependency on the parser.
+RUN npm install --no-audit --no-fund \
+      /tmp/packed/iodd-parser-*.tgz \
+      /tmp/packed/node-red-contrib-iolink-suite-*.tgz
+
+HEALTHCHECK --interval=3s --timeout=3s --start-period=5s --retries=20 \
+  CMD node -e "fetch('http://127.0.0.1:1880/settings').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"
