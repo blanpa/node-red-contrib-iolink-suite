@@ -71,6 +71,19 @@ test('writing a parameter removes the scaling before it goes on the wire', async
   } finally { await close() }
 })
 
+test('a write reports the device it went to, as a read does', async () => {
+  // A flow that logs or correlates on device and timestamp should not have to
+  // special-case the direction.
+  const { node, close } = await setup({ parameter: 'Switch point', action: 'write' })
+  try {
+    const [msg] = await node.receive({ payload: 30 })
+    assert.deepEqual(msg.device, {
+      vendor: 'Test Instruments GmbH', product: 'DEMO-100', port: 1
+    })
+    assert.match(msg.timestamp, /^\d{4}-\d{2}-\d{2}T/)
+  } finally { await close() }
+})
+
 test('a write can be requested per message', async () => {
   const { node, master, close } = await setup({ parameter: 'Switch point' })
   try {

@@ -42,6 +42,33 @@ test('iolink-scan takes its port list from the message', async () => {
   } finally { await close() }
 })
 
+test('iolink-scan takes a port list the way people actually send one', async () => {
+  // A comma-separated string and a bare number are the obvious things to put
+  // on a message. Handed straight to the adapter, "1,2" asked the master about
+  // port[1], port[,] and port[2], and 3 was "list is not iterable".
+  const { node, close } = await setup('iolink-scan.js', 'iolink-scan', { ports: '1,2,3' })
+  try {
+    const [fromString] = await node.receive({ ports: '1,2' })
+    assert.deepEqual(fromString.payload.map(p => p.port), [1, 2])
+
+    const [fromNumber] = await node.receive({ ports: 2 })
+    assert.deepEqual(fromNumber.payload.map(p => p.port), [2])
+
+    const [fromStrings] = await node.receive({ ports: ['1', '3'] })
+    assert.deepEqual(fromStrings.payload.map(p => p.port), [1, 3])
+  } finally { await close() }
+})
+
+test('iolink-scan refuses a port list that holds no port', async () => {
+  // Scanning nothing, or quietly falling back to every port, would hide the
+  // typo that caused it.
+  const { node, close } = await setup('iolink-scan.js', 'iolink-scan', { ports: '1,2,3' })
+  try {
+    const error = await node.receiveExpectingError({ ports: 'port one' })
+    assert.match(error.message, /IOLINK_BAD_PORT/)
+  } finally { await close() }
+})
+
 test('iolink-scan reports a device whose IODD cannot be found, rather than failing', async () => {
   const { node, master, close } = await setup('iolink-scan.js', 'iolink-scan', { ports: '1' })
   try {
@@ -189,6 +216,51 @@ test('iolink-event says nothing while nothing changes', async () => {
     assert.deepEqual(await node.receive({}), [])
     assert.deepEqual(await node.receive({}), [])
   } finally { await close() }
+})
+
+test('iolink-event refuses to watch when its port list cannot be read', async () => {
+  // Silently watching every port would be a plausible-looking answer to a
+  // question the node cannot read.
+  const { node, master, close } = await setup('iolink-event.js', 'iolink-event',
+    { ports: 'one and two', interval: 250 })
+  try {
+    assert.equal(node.lastStatus.fill, 'red')
+    assert.equal(node.errors.length, 1)
+    await new Promise(resolve => setTimeout(resolve, 300))
+    assert.equal(master.requests.length, 0, 'a node that cannot read its config must not poll')
+  } finally { await close() }
+})
+
+test('iolink-event never has two polls in flight at once', async () => {
+  // The timer and an incoming message both poll. Overlapping runs would each
+  // diff against the state the other had just written, so a change would be
+  // reported twice or not at all.
+  const master = await new FakeMaster().listen()
+  try {
+    const RED = loadNodes('iolink-event.js')
+    const adapter = createAdapter('ifm', { url: master.url })
+    const scanPorts = adapter.scanPorts.bind(adapter)
+    let inFlight = 0
+    let overlapped = false
+    adapter.scanPorts = async (...args) => {
+      if (++inFlight > 1) overlapped = true
+      try {
+        // Long enough that a message arriving mid-poll really does collide.
+        await new Promise(resolve => setTimeout(resolve, 40))
+        return await scanPorts(...args)
+      } finally { inFlight-- }
+    }
+    withMaster(RED, adapter)
+
+    const node = RED.create('iolink-event', { master: 'master-1', ports: '1,2', interval: 250 })
+    // Push messages in while the deploy-time poll and the timer are running.
+    await Promise.all([
+      node.receive({}), node.receive({}), node.receive({}),
+      new Promise(resolve => setTimeout(resolve, 300))
+    ])
+    await node.close()
+    assert.equal(overlapped, false, 'polls must be serialised, not merely started')
+  } finally { await master.close() }
 })
 
 test('iolink-event polls on its own timer and stops on close', async () => {

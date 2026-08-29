@@ -10,6 +10,7 @@
       tls: { value: false },
       timeout: { value: 5000, validate: RED.validators.number() },
       ports: { value: '1,2,3,4,5,6,7,8' },
+      ioddRetryAfter: { value: 60000, validate: RED.validators.number(true) },
       language: { value: 'en' },
       keyStyle: { value: 'preserve' },
       ioddDir: { value: '' },
@@ -39,12 +40,15 @@
       })
       $('#iolink-test').on('click', function () {
         const status = $('#iolink-test-result').text('testing…').css('color', '')
-        // The node must exist on the server before it can be asked anything,
-        // so the dialog is deployed-state dependent; say so rather than fail.
-        $.getJSON('iolink-suite/scan/' + node.id)
-          .done(function (ports) {
-            const used = ports.filter(function (p) { return p.connected }).length
-            status.css('color', '#4a4').text(used + ' of ' + ports.length + ' ports in use')
+        // Identify, not scan: this question is "are the host, the credentials
+        // and the profile right", and a master with nothing plugged in yet
+        // should answer it. The node must exist on the server to be asked
+        // anything at all, so say that rather than fail obscurely.
+        $.getJSON('iolink-suite/identify/' + node.id)
+          .done(function (info) {
+            const name = [info.product, info.serial && '#' + info.serial]
+              .filter(Boolean).join(' ')
+            status.css('color', '#4a4').text(name ? 'reached ' + name : 'master reached')
           })
           .fail(function (xhr) {
             const body = xhr.responseJSON || {}
@@ -72,6 +76,10 @@
   <div class="form-row">
     <label for="node-config-input-httpPort"><i class="fa fa-random"></i> HTTP port</label>
     <input type="text" id="node-config-input-httpPort" placeholder="80">
+  </div>
+  <div class="form-row">
+    <label for="node-config-input-url"><i class="fa fa-link"></i> Base URL</label>
+    <input type="text" id="node-config-input-url" placeholder="built from host and port">
   </div>
   <div class="form-row">
     <label for="node-config-input-tls"><i class="fa fa-lock"></i> HTTPS</label>
@@ -124,6 +132,11 @@
     <input type="checkbox" id="node-config-input-offline" style="width:auto">
     <span>Never contact IODDfinder</span>
   </div>
+  <div class="form-row">
+    <label for="node-config-input-ioddRetryAfter"><i class="fa fa-refresh"></i> Retry after</label>
+    <input type="text" id="node-config-input-ioddRetryAfter" style="width:100px" placeholder="60000"> ms
+    <span style="color:#888">before looking again for an IODD that was not found</span>
+  </div>
 
   <div class="iolink-generic-only" style="display:none">
     <hr>
@@ -169,8 +182,19 @@
      so a plant can pin a specific IODD. Tick <b>Offline</b> for machines with no
      internet: only the folder and the cache are then used.</p>
 
+  <p>A device whose IODD is nowhere to be found is remembered as such for
+     <b>Retry after</b>, so one unpublished device on the rack does not send a
+     request to IODDfinder on every poll for as long as the flow runs. Dropping
+     the missing IODD into the folder and redeploying clears that immediately.</p>
+
+  <h3>Connection</h3>
+  <p>Give a <b>Host</b>, and optionally an HTTP port and HTTPS. A master that
+     lives behind a path or a proxy takes a full <b>Base URL</b> instead, which
+     overrides both.</p>
+
   <h3>Test connection</h3>
-  <p>Scans the master's ports and reports how many are in use. The master must
-     have been deployed at least once, since the test runs against the deployed
-     configuration.</p>
+  <p>Asks the master to identify itself and reports what answered. The master
+     must have been deployed at least once, since the test runs against the
+     deployed configuration. It says nothing about what is plugged in — the
+     <b>iolink scan</b> node answers that.</p>
 </script>

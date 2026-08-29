@@ -32,6 +32,17 @@ All notable changes to this package are documented here. The format follows
 - `npm run lint` (standard), and a GitHub Actions workflow running the unit
   suite on Node 18 and 22 plus the Node-RED integration test.
 
+- Every setting the nodes honour can now be reached in the editor. **Base URL**
+  on the master, and **Re-check**, **Vendor ID** and **Device ID** on the read,
+  write and parameter nodes, were read at runtime but had no field to set them,
+  so pinning a device identity — the documented answer for a master that cannot
+  report one — was only possible by editing the flow file by hand. The write
+  node also gained the process data **Layout** picker the read node has.
+- The editor halves of the nodes are linted (`scripts/lint-editors.js` lifts
+  each script block out of the .html and maps the results back), and a test
+  checks that every property in a node's `defaults` has somewhere in its edit
+  dialog to set it.
+
 ### Changed
 
 - The whole suite is one package. The IODD parser moved from its own workspace
@@ -45,8 +56,36 @@ All notable changes to this package are documented here. The format follows
 - Unit codes the normative source lists twice (1050, 1380) keep both readings:
   `lookupUnit()` reports the alternatives rather than picking one silently.
 
+- **Test connection** on the master asks the master to identify itself instead
+  of scanning all its ports: two requests rather than one per port, and an
+  answer even from a master with nothing plugged into it yet.
+- `iolink param` reports `device` and `timestamp` on a write, as it already did
+  on a read.
+- `MasterAdapter.subscribe()` is gone. No profile implemented it and nothing
+  called it; an extension point no caller honours is worse than none.
+
 ### Fixed
 
+- A device whose IODD is nowhere to be found is remembered as such for a
+  configurable time. Every read used to repeat the whole lookup, so one
+  unpublished device on a rack sent a request to IODDfinder on every poll —
+  once a second on a one-second interval — for as long as the flow ran.
+- Several nodes asking for the same IODD at the same moment now share one
+  lookup. Since every polling node reads once at deploy, four read nodes on one
+  master used to start four downloads of the same file.
+- A folder of IODDs is parsed once rather than once per device on the rack: the
+  file each device sits in is remembered per file and modification time.
+- `iolink scan` reads `msg.ports` the way people send it. A comma-separated
+  string asked the master about `port[,]`, and a bare number failed with "list
+  is not iterable"; both now work, and a list holding no port number is refused
+  with `IOLINK_BAD_PORT` instead of quietly scanning nothing.
+- `iodd decode` keeps the last few message-supplied IODDs parsed. Driving one
+  node from the flow — the documented way to serve several device types — re-read
+  and re-parsed the whole XML for every message, which costs orders of magnitude
+  more than the decoding it was there for.
+- `iolink event` no longer polls twice at once. An input message arriving while
+  the timer was mid-poll produced two runs that each compared the ports against
+  what the other had just recorded, so a change could be reported twice or lost.
 - A read that was already in flight no longer delivers its message after the
   node has been closed.
 

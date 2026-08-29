@@ -1,6 +1,8 @@
 'use strict'
-const { PortIdentityCache, resolveDevice, shapeOutput, splitOutput, fail, resolvePort, startPolling, asTick } =
-  require('../lib/runtime')
+const {
+  PortIdentityCache, resolveDevice, shapeOutput, splitOutput, fail, resolvePort,
+  startPolling, asTick, safeJson
+} = require('../lib/runtime')
 
 module.exports = function (RED) {
   /**
@@ -98,11 +100,6 @@ module.exports = function (RED) {
 
   const pick = (obj, keys) =>
     Object.fromEntries(Object.entries(obj).filter(([k]) => keys.includes(k)))
-
-  const safeJson = raw => {
-    if (!raw || typeof raw === 'object') return raw || undefined
-    try { return JSON.parse(raw) } catch { return undefined }
-  }
 
   RED.nodes.registerType('iolink-read', IolinkReadNode)
 }

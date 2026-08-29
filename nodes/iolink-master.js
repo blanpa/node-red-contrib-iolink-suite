@@ -1,6 +1,7 @@
 'use strict'
 const { createAdapter, listProfiles } = require('../lib/adapters')
 const { IoddStore } = require('../lib/iodd-store')
+const { parsePorts, safeJson } = require('../lib/runtime')
 
 module.exports = function (RED) {
   /**
@@ -25,7 +26,7 @@ module.exports = function (RED) {
       url: config.url,
       tls: config.tls,
       timeout: Number(config.timeout) || 5000,
-      ports: parsePorts(config.ports),
+      ports: readPorts(node, config.ports),
       user: credentials.user || undefined,
       password: credentials.password || undefined,
       paths: safeJson(config.paths),
@@ -38,7 +39,8 @@ module.exports = function (RED) {
       cacheDir: config.ioddCacheDir || undefined,
       localDir: config.ioddDir || undefined,
       offline: Boolean(config.offline),
-      timeout: Number(config.timeout) || 5000
+      timeout: Number(config.timeout) || 5000,
+      retryAfter: Number(config.ioddRetryAfter) || undefined
     })
 
     /** Parse options every node under this master shares. */
@@ -60,17 +62,18 @@ module.exports = function (RED) {
     }
   })
 
-  const parsePorts = raw => {
-    if (Array.isArray(raw)) return raw.map(Number).filter(Number.isFinite)
-    if (typeof raw === 'string' && raw.trim()) {
-      return raw.split(',').map(s => Number(s.trim())).filter(Number.isFinite)
+  /**
+   * A config node that throws in its constructor never starts, and a master
+   * that does not start takes every node pointing at it with it. A port list
+   * nobody can read is worth saying out loud, but not worth that.
+   */
+  const readPorts = (node, raw) => {
+    try {
+      return parsePorts(raw)
+    } catch (e) {
+      node.error(`${e.message}; watching every port instead`)
+      return undefined
     }
-    return undefined
-  }
-
-  const safeJson = raw => {
-    if (!raw || typeof raw === 'object') return raw || undefined
-    try { return JSON.parse(raw) } catch { return undefined }
   }
 
   // ---------------------------------------------------------------- editor API
@@ -92,6 +95,18 @@ module.exports = function (RED) {
   RED.httpAdmin.get('/iolink-suite/profiles',
     RED.auth.needsPermission('flows.read'),
     (_req, res) => res.json(listProfiles()))
+
+  /**
+   * Ask the master who it is.
+   *
+   * This is what "Test connection" needs: two requests that answer whether the
+   * host, the port, the credentials and the profile are right. Scanning instead
+   * asks about eight ports to learn the same thing, and reports nothing useful
+   * about a master that simply has nothing plugged into it yet.
+   */
+  RED.httpAdmin.get('/iolink-suite/identify/:id',
+    RED.auth.needsPermission('flows.write'),
+    withMaster(node => node.adapter.identify()))
 
   /** Ask the master which ports are occupied and by what. */
   RED.httpAdmin.get('/iolink-suite/scan/:id',

@@ -47,7 +47,7 @@
     "test:docker": "docker compose -f docker-compose.test.yml run --rm --build unit",
     "test:integration": "docker compose -f docker-compose.test.yml run --rm --build integration",
     "test:all": "npm run test:docker && npm run test:integration",
-    "lint": "standard",
+    "lint": "standard && node scripts/lint-editors.js",
     "lint:fix": "standard --fix"
   },
   "dependencies": {

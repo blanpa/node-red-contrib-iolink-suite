@@ -124,5 +124,7 @@
      A message is emitted whenever the status or the set of standing events
      changes, so a sensor asking for cleaning shows up once, not every poll.</p>
   <p>An input message polls once immediately, which is useful for reporting state
-     on demand rather than waiting for the next tick.</p>
+     on demand rather than waiting for the next tick. It waits for a poll already
+     running rather than joining it: two at once would each compare the ports
+     against what the other had just recorded.</p>
 </script>

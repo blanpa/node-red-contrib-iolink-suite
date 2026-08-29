@@ -66,7 +66,9 @@
     <select id="node-input-keyStyle" style="width:70%">
       <option value="preserve">As written in the IODD</option>
       <option value="camel">camelCase</option>
+      <option value="pascal">PascalCase</option>
       <option value="snake">snake_case</option>
+      <option value="kebab">kebab-case</option>
     </select>
   </div>
   <div class="form-row" id="iolink-row-enums">
@@ -112,7 +114,9 @@
         Encoding: an object of values keyed by datapoint name.</dd>
     <dt class="optional">iodd <span class="property-type">string</span></dt>
     <dd>An IODD for this message only — a file path, or the XML itself. One node
-        can then serve several device types driven by the flow.</dd>
+        can then serve several device types driven by the flow. The last few are
+        kept parsed, so sending the same one with every message costs nothing
+        after the first.</dd>
     <dt class="optional">direction <span class="property-type">string</span></dt>
     <dd><code>in</code> or <code>out</code>.</dd>
     <dt class="optional">variant / conditions</dt>

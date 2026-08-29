@@ -55,12 +55,22 @@ Pick a **profile** in the `iolink master` config node:
   `{port}`, `{index}`, `{subindex}` and `{value}`, and `valuePath` says where
   the value sits in the reply (e.g. `data.value`).
 
+Give it a **host**, optionally an HTTP port and HTTPS. A master behind a path or
+a proxy takes a full **base URL** instead, which overrides both.
+
 Where the IODD comes from, in order:
 
 1. **IODD folder** (`ioddDir`) — files are matched by their content, not their
    filename, so vendor naming does not matter. A pinned IODD always wins.
 2. **IODDfinder**, cached on disk (`ioddCacheDir`). Tick **offline** on an
    air-gapped plant to switch this off.
+
+A device whose IODD is nowhere to be found is remembered as such for **retry
+after** (60 s by default), so one unpublished device on a rack does not send a
+request to IODDfinder on every poll for as long as the flow runs. Dropping the
+missing IODD into the folder and redeploying clears that at once. Several nodes
+asking for the same IODD at the same moment share one lookup rather than each
+starting their own.
 
 ## Reading process data
 
@@ -79,6 +89,18 @@ the layout id, the octet count).
 Set an **interval** to poll: the node reads once as soon as the flow is
 deployed and then on every tick. A tick is skipped while the previous read is
 still in flight, so a slow master cannot build a backlog.
+
+### Which device is on the port
+
+`read`, `write` and `param` ask the port who is on it and cache the answer for
+**re-check** (30 s by default) — asking before every read would triple the
+traffic to the master, and pinning it for ever would survive a device being
+swapped. Shorten it where devices are changed while the flow runs.
+
+Filling in **vendor ID** and **device ID** pins the device instead: the node
+loads that IODD and stops asking. That is the answer for a master whose API
+cannot report an identity, and a way to hold a port to the device type it is
+meant to carry.
 
 ## Writing process data
 
@@ -138,6 +160,8 @@ branch on.
 | `IOLINK_OUT_OF_RANGE` | The value is outside the range the IODD declares. |
 | `IOLINK_READ_ONLY` / `IOLINK_WRITE_ONLY` | The parameter does not allow it. |
 | `IOLINK_UNKNOWN_PARAMETER` / `IOLINK_UNKNOWN_SUBINDEX` | No such parameter in the IODD. |
+| `IOLINK_NO_PARAMETER` | No parameter was selected, in the node or on the message. |
+| `IOLINK_UNSUPPORTED_PARAMETER` | The IODD describes the parameter in a way this decoder cannot handle. |
 | `IOLINK_MERGE_UNAVAILABLE` | The master cannot read its output back to merge into. |
 | `IODD_*` | Raised by the decoder: a bad IODD, an ambiguous variant, wrong data length. |
 
@@ -150,6 +174,7 @@ nodes/        the seven nodes, runtime .js beside editor .html
 lib/          adapters/  one file per master profile, raw hex only
               iodd/      the IODD parser and the process data codec
 test/         unit tests; test/iodd/ covers the decoder
+scripts/      the editor linter, the IODD corpus fetcher, the unit generator
 docker/       the containers the test suites run in
 examples/     flows offered in Node-RED's Import → Examples menu
 icons/        the palette icons, white on transparent, 2:3 as Node-RED wants
@@ -214,7 +239,7 @@ inject node that pulls a device out is a fine way to demonstrate an alarm.
 
 ```bash
 npm test                     # unit tests, no hardware and no network
-npm run lint
+npm run lint                 # including the editor scripts inside the .html
 npm run test:docker          # the same suite in a clean container
 npm run test:integration     # the nodes loaded into real Node-RED, in Docker
 npm run test:all             # both of the above
@@ -227,6 +252,13 @@ integration test installs the packed tarball into the official
 `nodered/node-red` image — so anything left out of `package.json` fails there
 and not on a user's machine — deploys a flow that uses every node, and checks
 the decoded values that come out the other end.
+
+The editor halves of the nodes are linted too: `standard` reads `.js` files, so
+`scripts/lint-editors.js` lifts each `<script>` block out of the `.html`, lints
+it, and maps the line numbers back. A unit test also checks that every property
+in a node's `defaults` has somewhere in its edit dialog to set it — a mismatch
+there is invisible at runtime and leaves a setting reachable only by editing the
+flow file by hand.
 
 Real vendor IODDs are copyrighted and are never committed. `npm run corpus`
 fetches a set from IODDfinder; the decoder's corpus tests skip without it.

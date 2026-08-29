@@ -1,8 +1,12 @@
 'use strict'
 const fs = require('node:fs')
 const path = require('node:path')
-const { parseIodd, IoddError } = require('../lib/iodd')
+const { parseIodd } = require('../lib/iodd')
 const { extractIodd } = require('../lib/iodd/zip')
+const { fail, shorten, safeJson } = require('../lib/runtime')
+
+/** How many message-supplied IODDs one node keeps parsed. */
+const MESSAGE_IODD_CACHE = 4
 
 module.exports = function (RED) {
   /**
@@ -19,6 +23,13 @@ module.exports = function (RED) {
 
     let device = null
     let loadError = null
+    // Parsing an IODD costs orders of magnitude more than decoding a block of
+    // process data, so a flow that sends the same msg.iodd with every message -
+    // the documented way to serve several device types from one node - must not
+    // re-read and re-parse it every time. Keyed by the source itself, since
+    // that is what decides the result; a handful of entries covers the case
+    // this exists for without holding a library of XML in memory.
+    const fromMessage = new Map()
 
     function parseOptions () {
       return {
@@ -47,7 +58,7 @@ module.exports = function (RED) {
           : { fill: 'green', shape: 'dot', text: short(device) })
       } catch (e) {
         loadError = e
-        node.status({ fill: 'red', shape: 'ring', text: trim(e.message) })
+        node.status({ fill: 'red', shape: 'ring', text: shorten(e.message) })
       }
     }
 
@@ -58,11 +69,7 @@ module.exports = function (RED) {
         // An IODD supplied on the message wins, so one node can serve several
         // device types driven by the flow.
         let active = device
-        if (msg.iodd) {
-          active = parseIodd(typeof msg.iodd === 'string' && !msg.iodd.trimStart().startsWith('<')
-            ? readIodd(msg.iodd)
-            : msg.iodd, parseOptions())
-        }
+        if (msg.iodd) active = parseFromMessage(msg.iodd)
         if (!active) throw loadError || new Error('no IODD loaded')
 
         const direction = (msg.direction || config.direction || 'in').toLowerCase()
@@ -115,13 +122,39 @@ module.exports = function (RED) {
         })
         if (done) done()
       } catch (e) {
-        // Every node in the suite prefixes the code, so a Catch node can branch
-        // on it whichever node the error came from.
-        const text = (e instanceof IoddError || e.code) ? `${e.code}: ${e.message}` : e.message
-        node.status({ fill: 'red', shape: 'ring', text: trim(e.message) })
-        if (done) done(Object.assign(e, { message: text }))
-        else node.error(text, msg)
+        // The same reporting as every other node in the suite: a short status
+        // on the node, and an error prefixed with the code a Catch node can
+        // branch on whichever node it came from.
+        fail(node, msg, e, done)
       }
+    })
+
+    /** Parse an IODD sent on a message, reusing the last few. */
+    function parseFromMessage (source) {
+      const key = typeof source === 'string' ? source : JSON.stringify(source)
+      const hit = fromMessage.get(key)
+      if (hit) {
+        // Re-inserting keeps the ones actually in use, so a flow alternating
+        // between two device types does not evict them in turn.
+        fromMessage.delete(key)
+        fromMessage.set(key, hit)
+        return hit
+      }
+      const parsed = parseIodd(
+        typeof source === 'string' && !source.trimStart().startsWith('<')
+          ? readIodd(source)
+          : source,
+        parseOptions())
+      fromMessage.set(key, parsed)
+      if (fromMessage.size > MESSAGE_IODD_CACHE) {
+        fromMessage.delete(fromMessage.keys().next().value)
+      }
+      return parsed
+    }
+
+    node.on('close', function (done) {
+      fromMessage.clear()
+      done()
     })
   }
 
@@ -135,11 +168,6 @@ module.exports = function (RED) {
 
   const short = d =>
     `${d.identity.vendorName} ${(d.identity.variants[0] || {}).productId || d.identity.deviceName || ''}`.slice(0, 32)
-  const trim = (t, n = 40) => (t.length > n ? t.slice(0, n - 1) + '…' : t)
-  const safeJson = raw => {
-    if (!raw || typeof raw === 'object') return raw || undefined
-    try { return JSON.parse(raw) } catch { return undefined }
-  }
 
   RED.nodes.registerType('iodd-decode', IoddDecodeNode)
 }

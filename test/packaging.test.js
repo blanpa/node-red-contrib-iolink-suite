@@ -44,6 +44,46 @@ test('each node registers the type it is declared under', () => {
   }
 })
 
+/**
+ * Node-RED reads an edit dialog by looking for `#node-input-<property>` for
+ * every key in `defaults`. A key with no such element is not an error anywhere:
+ * the editor leaves the stored value alone and the field simply cannot be
+ * reached, so a setting the runtime honours is only reachable by hand-editing
+ * the flow file. That is how identityTtl, vendorId, deviceId and url spent a
+ * release being documented in code comments and settable by nobody.
+ */
+test('every configurable property has somewhere in the dialog to set it', () => {
+  // The type half of a typedInput is carried by a hidden field the widget
+  // drives; it has no label and nothing to click, which is the point.
+  const rendered = new Set(['portType', 'parameterType'])
+
+  for (const [name, file] of declared) {
+    const html = fs.readFileSync(path.join(root, file.replace(/\.js$/, '.html')), 'utf8')
+    const block = html.match(/defaults:\s*\{([\s\S]*?)\n\s{4}\}/)
+    assert.ok(block, `${name}: could not find the defaults block`)
+
+    const isConfig = /category:\s*'config'/.test(html)
+    const prefix = isConfig ? 'node-config-input' : 'node-input'
+    const template = html.match(
+      new RegExp(`data-template-name=["']${name}["']>([\\s\\S]*?)</script>`))
+    assert.ok(template, `${name}: could not find the edit template`)
+
+    for (const line of block[1].split('\n')) {
+      const property = (line.match(/^\s*(\w+)\s*:/) || [])[1]
+      if (!property || rendered.has(property)) continue
+      // A property naming a config node type is rendered by the runtime.
+      if (/type:\s*'[\w-]+'/.test(line)) continue
+      // Either a field of its own, or a value oneditsave builds - which is how
+      // a list of tickboxes becomes one array property.
+      const hasField = template[1].includes(`id="${prefix}-${property}"`)
+      const builtOnSave = new RegExp(`this\\.${property}\\s*=`).test(html)
+      assert.ok(hasField || builtOnSave,
+        `${name}: "${property}" is in defaults and used at runtime, but the ` +
+        `edit dialog has no #${prefix}-${property} to set it`)
+    }
+  }
+})
+
 test('the html files declare no node type that the package does not ship', () => {
   const names = new Set(declared.map(([name]) => name))
   for (const file of fs.readdirSync(path.join(root, 'nodes')).filter(f => f.endsWith('.html'))) {

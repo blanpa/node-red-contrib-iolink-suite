@@ -1,5 +1,5 @@
 'use strict'
-const { fail } = require('../lib/runtime')
+const { fail, parsePorts } = require('../lib/runtime')
 
 module.exports = function (RED) {
   /**
@@ -20,7 +20,12 @@ module.exports = function (RED) {
 
     node.on('input', async function (msg, send, done) {
       try {
-        const ports = msg.ports || parsePorts(config.ports)
+        // Both routes go through the same parser. A message carrying
+        // "1,2" or a bare 3 is the obvious thing to send, and passing it
+        // straight to the adapter asked the master for port[,] instead.
+        const ports = msg.ports !== undefined && msg.ports !== null && msg.ports !== ''
+          ? parsePorts(msg.ports)
+          : parsePorts(config.ports)
         const result = await master.adapter.scanPorts(ports)
 
         if (config.resolveIodd !== false) {
@@ -55,14 +60,6 @@ module.exports = function (RED) {
         fail(node, msg, e, done)
       }
     })
-  }
-
-  const parsePorts = raw => {
-    if (Array.isArray(raw)) return raw.map(Number).filter(Number.isFinite)
-    if (typeof raw === 'string' && raw.trim()) {
-      return raw.split(',').map(s => Number(s.trim())).filter(Number.isFinite)
-    }
-    return undefined
   }
 
   RED.nodes.registerType('iolink-scan', IolinkScanNode)

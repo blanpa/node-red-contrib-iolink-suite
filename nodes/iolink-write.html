@@ -32,15 +32,35 @@
         if (!masterId || masterId === '_ADD_') {
           return status.css('color', '#a44').text('choose and deploy a master first')
         }
-        $.getJSON('iolink-suite/datapoints/' + masterId + '/' + encodeURIComponent(port) + '?direction=out')
+        const variant = $('#node-input-variant').val()
+        const query = '?direction=out' +
+          (variant ? '&variant=' + encodeURIComponent(variant) : '')
+        $.getJSON('iolink-suite/datapoints/' + masterId + '/' +
+                  encodeURIComponent(port) + query)
           .done(function (result) {
+            // The layouts come back whether or not the items did, so offer them
+            // even when the device could not settle on one by itself - that is
+            // exactly the case where the choice has to be made by hand.
+            const select = $('#node-input-variant')
+            const current = select.val()
+            select.empty().append($('<option>').val('').text('(automatic)'))
+            ;(result.variants || []).forEach(function (v) {
+              const text = v.id + (v.condition
+                ? ' — when ' + v.condition.variableId + ' = ' + v.condition.value
+                : '')
+              select.append($('<option>').val(v.id).text(text))
+            })
+            select.val(current)
+            $('.iolink-variant-row').toggle((result.variants || []).length > 1)
+
             if (result.error) return status.css('color', '#b8860b').text(result.error)
             status.css('color', '#4a4').text(
               result.device.vendorName + ' ' + result.device.productName)
             const list = $('#iolink-writable').empty()
             ;(result.items || []).forEach(function (item) {
               const range = (item.min !== undefined && item.max !== undefined)
-                ? ' ' + item.min + '…' + item.max : ''
+                ? ' ' + item.min + '…' + item.max
+                : ''
               $('<div>').css({ padding: '2px 0', cursor: 'pointer' })
                 .text(item.name + ' — ' + item.type + item.bitLength +
                       (item.unit ? ' [' + item.unit + ']' : '') + range)
@@ -91,6 +111,10 @@
       <div class="form-tips">Scan to list what this device accepts. Click a value to add it below.</div>
     </div>
   </div>
+  <div class="form-row iolink-variant-row" style="display:none">
+    <label for="node-input-variant"><i class="fa fa-code-fork"></i> Layout</label>
+    <select id="node-input-variant" style="width:70%"></select>
+  </div>
   <div class="form-row">
     <label for="node-input-values"><i class="fa fa-pencil"></i> Values</label>
     <input type="text" id="node-input-values" placeholder='{"Valve": true}'>
@@ -104,6 +128,24 @@
     <label for="node-input-ignoreRange"><i class="fa fa-exclamation-triangle"></i> Range</label>
     <input type="checkbox" id="node-input-ignoreRange" style="width:auto">
     <span>Allow values outside the IODD's declared range</span>
+  </div>
+
+  <hr>
+  <div class="form-row">
+    <label for="node-input-identityTtl"><i class="fa fa-hourglass-half"></i> Re-check</label>
+    <input type="text" id="node-input-identityTtl" style="width:100px" placeholder="30000"> ms
+    <span style="color:#888">how long the device on the port is taken as unchanged</span>
+  </div>
+  <div class="form-row">
+    <label for="node-input-vendorId"><i class="fa fa-building"></i> Vendor ID</label>
+    <input type="text" id="node-input-vendorId" style="width:100px" placeholder="read from the port">
+    <label for="node-input-deviceId" style="width:auto;margin-left:12px">Device ID</label>
+    <input type="text" id="node-input-deviceId" style="width:100px" placeholder="read from the port">
+  </div>
+  <div class="form-tips">
+    Leave the ids empty and the node asks the port who is on it. Fill them in for
+    a master that cannot report a device's identity, or to hold one port to one
+    device type — the node then loads that IODD and never asks.
   </div>
 </script>
 
@@ -131,4 +173,14 @@
   <p>Values outside the range the IODD declares are rejected. Some vendors declare
      a range narrower than the device accepts; <b>Range</b> lifts the check for
      those cases.</p>
+
+  <h3>Device identity</h3>
+  <p>The node normally asks the port which device is on it and caches the answer
+     for <b>Re-check</b>, since asking before every write would double the traffic
+     to the master. Shorten it if devices are swapped while the flow runs;
+     lengthen it for a rack that never changes.</p>
+  <p>Setting <b>Vendor ID</b> and <b>Device ID</b> pins the device instead: the
+     node loads that IODD and stops asking. That is the answer for a master whose
+     API cannot report an identity, and a way to make a port refuse to write
+     anything but the device it is meant to carry.</p>
 </script>

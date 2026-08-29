@@ -49,7 +49,15 @@ module.exports = function (RED) {
           const hex = encodeParameter(item, msg.payload)
           await master.adapter.writeIsdu(port, variable.index, subindex, hex)
           node.status({ fill: 'green', shape: 'dot', text: `wrote ${variable.name}` })
-          send({ ...msg, payload: msg.payload, iolink: rawInfo(variable, subindex, hex) })
+          // Same shape as the read path: a flow that logs or correlates on
+          // device and timestamp should not have to special-case a write.
+          send({
+            ...msg,
+            payload: msg.payload,
+            iolink: rawInfo(variable, subindex, hex),
+            device: describe(device, port),
+            timestamp: new Date().toISOString()
+          })
         } else {
           if (variable.access === 'wo') {
             throw Object.assign(
@@ -64,11 +72,7 @@ module.exports = function (RED) {
             payload: value.value,
             meta: value.meta,
             iolink: rawInfo(variable, subindex, hex),
-            device: {
-              vendor: device.identity.vendorName,
-              product: (device.identity.variants[0] || {}).productId,
-              port
-            },
+            device: describe(device, port),
             timestamp: new Date().toISOString()
           })
         }
@@ -193,6 +197,12 @@ module.exports = function (RED) {
     const buf = encodeItem(Buffer.alloc(octets), { ...item, bitOffset: 0 }, raw)
     return buf.toString('hex')
   }
+
+  const describe = (device, port) => ({
+    vendor: device.identity.vendorName,
+    product: (device.identity.variants[0] || {}).productId,
+    port
+  })
 
   const rawInfo = (variable, subindex, hex) => ({
     index: variable.index,

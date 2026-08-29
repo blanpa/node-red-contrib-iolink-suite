@@ -303,3 +303,59 @@ test('a device that answers 36 but refuses 37 still reports its status', async (
   assert.equal(status.deviceStatusText, 'Failure')
   assert.equal(status.deviceEvents, undefined)
 })
+
+// ------------------------------------------------------------------ port lists
+
+test('a port list is read from every shape one actually arrives in', () => {
+  const { parsePorts } = require('../lib/runtime')
+  assert.deepEqual(parsePorts('1,2,3'), [1, 2, 3])
+  assert.deepEqual(parsePorts(' 1, 2 ,4 '), [1, 2, 4])
+  assert.deepEqual(parsePorts([1, 2]), [1, 2])
+  assert.deepEqual(parsePorts(['1', '2']), [1, 2])
+  assert.deepEqual(parsePorts(3), [3])
+  assert.equal(parsePorts(''), undefined, 'nothing configured means every port')
+  assert.equal(parsePorts(undefined), undefined)
+})
+
+test('a port list that holds no port is an error, not an empty scan', () => {
+  const { parsePorts } = require('../lib/runtime')
+  // Falling back to every port would hide the typo; scanning none would too.
+  for (const bad of ['port one', 'a,b', ['x'], 0, -1]) {
+    assert.throws(() => parsePorts(bad), e => e.code === 'IOLINK_BAD_PORT',
+      `${JSON.stringify(bad)} should be refused`)
+  }
+})
+
+// ------------------------------------------------------------------ serialiser
+
+test('a serialiser runs tasks one after another, in order', async () => {
+  const { serialiser } = require('../lib/runtime')
+  const run = serialiser()
+  const order = []
+  let active = 0
+  let overlapped = false
+
+  const task = name => async () => {
+    if (++active > 1) overlapped = true
+    await new Promise(resolve => setTimeout(resolve, 10))
+    order.push(name)
+    active--
+  }
+
+  await Promise.all([run(task('a')), run(task('b')), run(task('c'))])
+  assert.equal(overlapped, false)
+  assert.deepEqual(order, ['a', 'b', 'c'])
+})
+
+test('one failed task does not stop the ones behind it', async () => {
+  const { serialiser } = require('../lib/runtime')
+  const run = serialiser()
+  const done = []
+
+  const failing = run(async () => { throw new Error('nope') })
+  const after = run(async () => { done.push('ran') })
+
+  await assert.rejects(failing, /nope/)
+  await after
+  assert.deepEqual(done, ['ran'], 'a poll must not be wedged by the one before it')
+})

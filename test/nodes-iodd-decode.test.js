@@ -2,6 +2,8 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
 const { loadNodes, DEMO_IODD } = require('./helpers')
 
 /**
@@ -69,6 +71,53 @@ test('an IODD path on the message is read from disk', async () => {
   const node = decoder({ iodd: '' })
   const [msg] = await node.receive({ payload: '092b0929', iodd: DEMO_IODD })
   assert.equal(msg.payload.Temperature, 23.47)
+})
+
+test('an IODD sent with every message is parsed once, not once per message', async () => {
+  // Parsing an IODD costs orders of magnitude more than decoding a block of
+  // process data, and driving one node from the flow means sending the same
+  // IODD over and over. Counted at the file, since that is what a flow sends.
+  const node = decoder({ iodd: '' })
+  let reads = 0
+  const readFileSync = fs.readFileSync
+  fs.readFileSync = (file, ...rest) => {
+    if (file === DEMO_IODD) reads++
+    return readFileSync(file, ...rest)
+  }
+  try {
+    for (let i = 0; i < 20; i++) {
+      const [msg] = await node.receive({ payload: '092b0929', iodd: DEMO_IODD })
+      assert.equal(msg.payload.Temperature, 23.47)
+    }
+  } finally {
+    fs.readFileSync = readFileSync
+  }
+  assert.equal(reads, 1, 'the same IODD should be read and parsed once')
+})
+
+test('a flow alternating between IODDs keeps both parsed', async () => {
+  // Two devices driven by one node is the case the message-supplied IODD
+  // exists for; the cache must not evict one to make room for the other.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'iodd-alt-'))
+  const other = path.join(dir, 'second.xml')
+  fs.copyFileSync(DEMO_IODD, other)
+  const node = decoder({ iodd: '' })
+  let reads = 0
+  const readFileSync = fs.readFileSync
+  fs.readFileSync = (file, ...rest) => {
+    if (file === DEMO_IODD || file === other) reads++
+    return readFileSync(file, ...rest)
+  }
+  try {
+    for (let i = 0; i < 6; i++) {
+      await node.receive({ payload: '092b0929', iodd: DEMO_IODD })
+      await node.receive({ payload: '092b0929', iodd: other })
+    }
+  } finally {
+    fs.readFileSync = readFileSync
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+  assert.equal(reads, 2, 'two IODDs, two parses')
 })
 
 test('the language chooses which names the values get', async () => {

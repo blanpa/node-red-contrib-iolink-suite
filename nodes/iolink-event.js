@@ -1,5 +1,6 @@
 'use strict'
-const { fail, readDeviceStatus, startPolling, asTick } = require('../lib/runtime')
+const { fail, readDeviceStatus, startPolling, asTick, parsePorts, serialiser, shorten } =
+  require('../lib/runtime')
 const { lookupEvent, DEVICE_STATUS } = require('../lib/iodd')
 
 module.exports = function (RED) {
@@ -25,81 +26,96 @@ module.exports = function (RED) {
       return
     }
 
-    const ports = parsePorts(config.ports)
+    let ports
+    try {
+      ports = parsePorts(config.ports)
+    } catch (e) {
+      // Watching every port instead would be a plausible-looking answer to a
+      // question the node cannot read. Say so and watch nothing.
+      node.status({ fill: 'red', shape: 'ring', text: shorten(e.message) })
+      node.error(e.message)
+      return
+    }
     const interval = Math.max(250, Number(config.interval) || 2000)
     const wantsDeviceStatus = Boolean(config.deviceStatus)
     const previous = new Map()
     let stopPolling = null
     let started = false
 
-    async function poll (_msg, send, done) {
-      try {
-        const states = await master.adapter.scanPorts(ports)
-        const messages = []
+    // The timer and an incoming message both poll; one at a time, or the two
+    // runs would diff against each other's result rather than against the last
+    // reported state, and a change would be dropped or reported twice.
+    const oneAtATime = serialiser()
 
-        for (const state of states) {
-          if (wantsDeviceStatus && state.connected) {
-            try {
-              Object.assign(state, await readDeviceStatus(master.adapter, state.port))
-            } catch (e) {
-              // A device or master that will not answer index 36 must not stop
-              // the port watch; the refusal is reported as part of the state.
-              state.deviceStatusError = e.message
-            }
+    function poll (msg, send, done) {
+      oneAtATime(() => pollOnce(send)).then(
+        () => { if (done) done() },
+        e => fail(node, msg || {}, e, done))
+    }
+
+    async function pollOnce (send) {
+      const states = await master.adapter.scanPorts(ports)
+      const messages = []
+
+      for (const state of states) {
+        if (wantsDeviceStatus && state.connected) {
+          try {
+            Object.assign(state, await readDeviceStatus(master.adapter, state.port))
+          } catch (e) {
+            // A device or master that will not answer index 36 must not stop
+            // the port watch; the refusal is reported as part of the state.
+            state.deviceStatusError = e.message
           }
-          // Watched as one field: any change in the standing events is a change
-          // worth a message, without putting the whole list in the comparison.
-          state.deviceEventCodes = (state.deviceEvents || [])
-            .map(e => e.hex).sort().join(',') || undefined
-
-          const before = previous.get(state.port)
-          previous.set(state.port, state)
-          const changes = diff(before, state)
-          // The first poll establishes the baseline. Reporting every port as a
-          // change on startup would fire alarms for a healthy plant.
-          if (!started || !changes.length) continue
-          messages.push({
-            topic: `iolink/port${state.port}/status`,
-            payload: {
-              port: state.port,
-              connected: state.connected,
-              status: state.status,
-              statusText: state.statusText,
-              mode: state.mode,
-              modeText: state.modeText,
-              deviceStatus: state.deviceStatus,
-              deviceStatusText: DEVICE_STATUS[state.deviceStatus],
-              deviceEvents: state.deviceEvents,
-              deviceStatusError: state.deviceStatusError,
-              vendorId: state.vendorId,
-              deviceId: state.deviceId,
-              productName: state.productName
-            },
-            changes,
-            event: classify(before, state),
-            timestamp: new Date().toISOString()
-          })
         }
+        // Watched as one field: any change in the standing events is a change
+        // worth a message, without putting the whole list in the comparison.
+        state.deviceEventCodes = (state.deviceEvents || [])
+          .map(e => e.hex).sort().join(',') || undefined
 
-        started = true
-        const connected = states.filter(s => s.connected).length
-        const unwell = states.filter(s => s.deviceStatus > 0)
-        node.status(unwell.length
-          ? {
-              fill: 'yellow',
-              shape: 'dot',
-              text: `port ${unwell[0].port}: ${DEVICE_STATUS[unwell[0].deviceStatus]}`
-            }
-          : {
-              fill: connected ? 'green' : 'yellow',
-              shape: 'dot',
-              text: `${connected}/${states.length} ports connected`
-            })
-        if (messages.length) send([messages])
-        if (done) done()
-      } catch (e) {
-        fail(node, {}, e, done)
+        const before = previous.get(state.port)
+        previous.set(state.port, state)
+        const changes = diff(before, state)
+        // The first poll establishes the baseline. Reporting every port as a
+        // change on startup would fire alarms for a healthy plant.
+        if (!started || !changes.length) continue
+        messages.push({
+          topic: `iolink/port${state.port}/status`,
+          payload: {
+            port: state.port,
+            connected: state.connected,
+            status: state.status,
+            statusText: state.statusText,
+            mode: state.mode,
+            modeText: state.modeText,
+            deviceStatus: state.deviceStatus,
+            deviceStatusText: DEVICE_STATUS[state.deviceStatus],
+            deviceEvents: state.deviceEvents,
+            deviceStatusError: state.deviceStatusError,
+            vendorId: state.vendorId,
+            deviceId: state.deviceId,
+            productName: state.productName
+          },
+          changes,
+          event: classify(before, state),
+          timestamp: new Date().toISOString()
+        })
       }
+
+      started = true
+      const connected = states.filter(s => s.connected).length
+      const unwell = states.filter(s => s.deviceStatus > 0)
+      node.status(unwell.length
+        ? {
+            fill: 'yellow',
+            shape: 'dot',
+            text: `port ${unwell[0].port}: ${DEVICE_STATUS[unwell[0].deviceStatus]}`
+          }
+        : {
+            fill: connected ? 'green' : 'yellow',
+            shape: 'dot',
+            text: `${connected}/${states.length} ports connected`
+          })
+      if (messages.length) send([messages])
     }
 
     node.on('input', poll)
@@ -136,14 +152,6 @@ module.exports = function (RED) {
       return { ...lookupEvent(0x1803, 'port'), direction: 'device changed' }
     }
     return { ...lookupEvent(0xff26, 'port'), direction: 'status changed' }
-  }
-
-  const parsePorts = raw => {
-    if (Array.isArray(raw)) return raw.map(Number).filter(Number.isFinite)
-    if (typeof raw === 'string' && raw.trim()) {
-      return raw.split(',').map(s => Number(s.trim())).filter(Number.isFinite)
-    }
-    return undefined
   }
 
   RED.nodes.registerType('iolink-event', IolinkEventNode)

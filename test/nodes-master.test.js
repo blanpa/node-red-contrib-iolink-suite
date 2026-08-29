@@ -45,6 +45,17 @@ test('the configured port list is parsed into numbers', async () => {
   } finally { await close() }
 })
 
+test('an unreadable port list is reported, not fatal to the config node', async () => {
+  // A config node that throws in its constructor never starts, and takes every
+  // node pointing at it with it. Worth saying out loud, not worth that.
+  const { node, close } = await setup({ ports: 'first and second' })
+  try {
+    assert.equal(node.settings.ports, undefined, 'fall back to every port')
+    assert.equal(node.errors.length, 1)
+    assert.match(String(node.errors[0].error), /is not a list of port numbers/)
+  } finally { await close() }
+})
+
 test('a broken paths JSON is ignored rather than breaking the deploy', async () => {
   const { node, close } = await setup({ profile: 'generic', paths: '{not json' })
   try {
@@ -77,6 +88,23 @@ test('the scan endpoint returns ports with their IODD identification', async () 
     assert.equal(body[0].iodd.productName, 'DEMO-100')
     assert.equal(body[0].iodd.source, 'file')
     assert.equal(body[1].connected, false)
+  } finally { await close() }
+})
+
+test('the identify endpoint answers without asking about any port', async () => {
+  // This is what "Test connection" runs. Scanning to answer it costs a request
+  // per port and says nothing about a master with nothing plugged in yet.
+  const { RED, master, close } = await setup()
+  try {
+    const before = master.requests.length
+    const { status, body } = await RED.callRoute('GET', '/iolink-suite/identify/:id',
+      { id: 'master-1' })
+    assert.equal(status, 200)
+    assert.equal(body.profile, 'ifm')
+    assert.ok(body.product, 'the master should name itself')
+    assert.ok(master.requests.length - before <= 2,
+      'identifying should not walk the ports')
+    assert.ok(!master.requests.some(r => /iolinkmaster\/port/.test(r.adr)))
   } finally { await close() }
 })
 

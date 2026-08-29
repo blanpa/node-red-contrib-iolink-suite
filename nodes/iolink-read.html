@@ -36,10 +36,8 @@
       }).trigger('change')
 
       const list = $('#iolink-values')
-      let known = []
 
       function renderChecklist (items) {
-        known = items
         list.empty()
         if (!items.length) {
           list.append($('<div class="form-tips">').text('No values found for this port.'))
@@ -86,9 +84,11 @@
         if (!masterId || masterId === '_ADD_') {
           return status.css('color', '#a44').text('choose and deploy a master first')
         }
-        $.getJSON('iolink-suite/datapoints/' + masterId + '/' + encodeURIComponent(port) +
-                  '?direction=in' + ($('#node-input-variant').val()
-                    ? '&variant=' + encodeURIComponent($('#node-input-variant').val()) : ''))
+        const variant = $('#node-input-variant').val()
+        const query = '?direction=in' +
+          (variant ? '&variant=' + encodeURIComponent(variant) : '')
+        $.getJSON('iolink-suite/datapoints/' + masterId + '/' +
+                  encodeURIComponent(port) + query)
           .done(function (result) {
             if (result.error) {
               status.css('color', '#b8860b').text(result.error)
@@ -102,7 +102,8 @@
             select.empty().append($('<option>').val('').text('(automatic)'))
             ;(result.variants || []).forEach(function (v) {
               const text = v.id + (v.condition
-                ? ' — when ' + v.condition.variableId + ' = ' + v.condition.value : '')
+                ? ' — when ' + v.condition.variableId + ' = ' + v.condition.value
+                : '')
               select.append($('<option>').val(v.id).text(text))
             })
             select.val(current)
@@ -201,8 +202,34 @@
   <div class="form-row">
     <label for="node-input-interval"><i class="fa fa-repeat"></i> Poll</label>
     <input type="text" id="node-input-interval" style="width:100px" placeholder="0"> ms
-    <span style="color:#888">0 = only on input</span>
+
+  <hr>
+  <div class="form-row">
+    <label for="node-input-identityTtl"><i class="fa fa-hourglass-half"></i> Re-check</label>
+    <input type="text" id="node-input-identityTtl" style="width:100px" placeholder="30000"> ms
+    <span style="color:#888">how long the device on the port is taken as unchanged</span>
   </div>
+  <div class="form-row">
+    <label for="node-input-vendorId"><i class="fa fa-building"></i> Vendor ID</label>
+    <input type="text" id="node-input-vendorId" style="width:100px" placeholder="read from the port">
+    <label for="node-input-deviceId" style="width:auto;margin-left:12px">Device ID</label>
+    <input type="text" id="node-input-deviceId" style="width:100px" placeholder="read from the port">
+  </div>
+  <div class="form-tips">
+    Leave the ids empty and the node asks the port who is on it. Fill them in for
+    a master that cannot report a device's identity, or to hold one port to one
+    device type — the node then loads that IODD and never asks.
+  </div>
+
+  <h3>Device identity</h3>
+  <p>The node normally asks the port which device is on it and caches the answer
+     for <b>Re-check</b>, since asking before every read would triple the traffic
+     to the master. Shorten it if devices are swapped while the flow runs;
+     lengthen it for a rack that never changes.</p>
+  <p>Setting <b>Vendor ID</b> and <b>Device ID</b> pins the device instead: the
+     node loads that IODD and stops asking. That is the answer for a master whose
+     API cannot report an identity, and a way to make a port refuse to decode
+     anything but the device it is meant to carry.</p>
 </script>
 
 <script type="text/html" data-help-name="iolink-read">

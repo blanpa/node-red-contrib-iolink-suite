@@ -26,7 +26,8 @@
             const list = $('#iolink-ports').empty()
             ports.forEach(function (p) {
               const id = p.vendorId && p.deviceId
-                ? '  ·  ' + p.vendorId + '/' + p.deviceId : ''
+                ? '  ·  ' + p.vendorId + '/' + p.deviceId
+                : ''
               $('<div>').css({ padding: '2px 0', color: p.connected ? '' : '#888' })
                 .text('Port ' + p.port + ' — ' +
                   (p.connected ? (p.productName || 'unnamed device') : 'empty') +
@@ -85,8 +86,11 @@
 
   <h3>Input</h3>
   <dl class="message-properties">
-    <dt class="optional">ports <span class="property-type">array</span></dt>
-    <dd>Restricts the scan to these port numbers, overriding the configuration.</dd>
+    <dt class="optional">ports <span class="property-type">array | string | number</span></dt>
+    <dd>Restricts the scan to these port numbers, overriding the configuration.
+        <code>[1, 2]</code>, <code>"1,2"</code> and <code>2</code> all work. A
+        list that holds no port number is refused with
+        <code>IOLINK_BAD_PORT</code> rather than quietly scanning everything.</dd>
   </dl>
 
   <h3>Output</h3>
