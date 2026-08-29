@@ -173,7 +173,11 @@
         Balluff, Turck and others. Configure the path templates
         (<code>{port}</code>, <code>{index}</code>, <code>{subindex}</code>,
         <code>{value}</code>) and which field of the reply carries the value.
-        A working configuration is worth contributing back as a preset.</dd>
+        A working configuration is worth contributing back as a preset.
+        <p><code>readVendorId</code> and <code>readDeviceId</code> are the two
+        that decide whether IODDs can be looked up at all. Without them the
+        read, write and parameter nodes need the ids set on the node itself.
+        A path the master refuses is dropped rather than retried every poll.</p></dd>
   </dl>
 
   <h3>IODDs</h3>

@@ -31,6 +31,9 @@ async function restMaster () {
       }
       if (url.pathname === '/iolink/port/1/status') return reply(true)
       if (url.pathname === '/iolink/port/2/status') return reply(false)
+      if (url.pathname === '/iolink/port/1/vendorid') return reply('999')
+      if (url.pathname === '/iolink/port/1/deviceid') return reply('0x1092')
+      if (url.pathname === '/iolink/port/1/productname') return reply('DEMO-100')
       res.writeHead(404, { 'Content-Type': 'application/json' })
       res.end('{"error":"not found"}')
     })
@@ -158,4 +161,53 @@ test('a generic master with nothing to ask says so rather than claiming success'
   const adapter = createAdapter('generic',
     { url: 'http://127.0.0.1:1', paths: { readPortStatus: null }, timeout: 1000 })
   await assert.rejects(adapter.identify(), /nothing to test the connection with/)
+})
+
+/**
+ * Without a vendor and device id there is no IODD, and without an IODD the
+ * read, write and parameter nodes have nothing to decode against - so this is
+ * what makes the generic profile usable for more than raw hex.
+ */
+test('a generic scan reports who is on the port', async () => {
+  const master = await restMaster()
+  try {
+    const [one, two] = await adapterFor(master).scanPorts([1, 2])
+    assert.equal(one.connected, true)
+    assert.equal(one.vendorId, 999)
+    assert.equal(one.deviceId, 0x1092, 'an id written in hex is read as one')
+    assert.equal(one.productName, 'DEMO-100')
+    assert.equal(two.connected, false)
+    assert.equal(two.vendorId, undefined, 'an empty port is not interrogated')
+  } finally { await master.close() }
+})
+
+test('a master that does not answer an identity path is asked once, not every scan', async () => {
+  // The default paths are a guess at the shape. On a master that spells them
+  // differently, repeating four 404s per port per poll would be the event
+  // node's steady state.
+  const master = await restMaster()
+  try {
+    const adapter = createAdapter('generic', {
+      url: master.url,
+      valuePath: 'result.value',
+      timeout: 2000,
+      // Not answered by the stub master, so every request 404s.
+      paths: { readVendorId: 'GET /nope/{port}' }
+    })
+    for (let i = 0; i < 4; i++) await adapter.scanPorts([1])
+    const tries = master.calls.filter(c => c.path.startsWith('/nope')).length
+    assert.equal(tries, 1, 'a refused path should be dropped, not retried')
+    // The ones that do work must keep working.
+    const [one] = await adapter.scanPorts([1])
+    assert.equal(one.deviceId, 0x1092)
+  } finally { await master.close() }
+})
+
+test('a master that is merely unreachable keeps being asked', async () => {
+  // A refusal is about the path; a connection failure says nothing about it,
+  // so a master that comes back must be identified again.
+  const adapter = createAdapter('generic',
+    { url: 'http://127.0.0.1:1', timeout: 500, valuePath: 'result.value' })
+  await adapter._readIdentity(1)
+  assert.equal(adapter.unsupported.size, 0)
 })

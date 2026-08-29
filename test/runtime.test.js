@@ -394,3 +394,37 @@ test('the node status shows the failure, not the code twice over', () => {
   assert.equal(statuses[0].text, statuses[1].text)
   assert.equal(statuses[1].text, 'port 3 reports no IO-Link device')
 })
+
+test('a device the master cannot name is not reported as an empty port', async () => {
+  // Telling the two apart is the difference between looking at the wiring and
+  // looking at the configuration.
+  const { resolveDevice, PortIdentityCache } = require('../lib/runtime')
+  const master = {
+    adapter: { scanPorts: async ([port]) => [{ port, connected: true, status: 1 }] },
+    iodd: { device: async () => { throw new Error('should never get this far') } },
+    parseOptions: () => ({})
+  }
+  const error = await resolveDevice(master, 3, { identityCache: new PortIdentityCache(0) })
+    .then(() => null, e => e)
+
+  assert.equal(error.code, 'IOLINK_NO_IDENTITY')
+  assert.match(error.message, /has a device, but this master does not report which/)
+  assert.match(error.message, /readVendorId/, 'say what to do about it')
+})
+
+test('an empty port still says the port is empty', async () => {
+  const { resolveDevice, PortIdentityCache } = require('../lib/runtime')
+  const master = {
+    adapter: {
+      scanPorts: async ([port]) =>
+        [{ port, connected: false, statusText: 'no device' }]
+    },
+    iodd: { device: async () => { throw new Error('should never get this far') } },
+    parseOptions: () => ({})
+  }
+  const error = await resolveDevice(master, 3, { identityCache: new PortIdentityCache(0) })
+    .then(() => null, e => e)
+
+  assert.equal(error.code, 'IOLINK_NO_DEVICE')
+  assert.match(error.message, /port 3 reports no IO-Link device \(no device\)/)
+})

@@ -55,6 +55,14 @@ Pick a **profile** in the `iolink master` config node:
   `{port}`, `{index}`, `{subindex}` and `{value}`, and `valuePath` says where
   the value sits in the reply (e.g. `data.value`).
 
+  `readVendorId` and `readDeviceId` are the two that decide whether IODDs can
+  be found at all: without them the master can say a device is there but not
+  which, and `read`, `write` and `param` have nothing to decode against. They
+  then need the ids pinned on the node itself, and say so
+  (`IOLINK_NO_IDENTITY`) rather than claiming the port is empty. A path the
+  master refuses is dropped after the first try, so a wrong guess is not
+  repeated on every poll.
+
 Give it a **host**, optionally an HTTP port and HTTPS. A master behind a path or
 a proxy takes a full **base URL** instead, which overrides both.
 
@@ -154,6 +162,7 @@ branch on.
 | Code | Meaning |
 | --- | --- |
 | `IOLINK_NO_DEVICE` | The port reports no IO-Link device. |
+| `IOLINK_NO_IDENTITY` | A device is there, but the master will not say which — pin the ids, or configure the identity paths. |
 | `IOLINK_NO_DATA` | The master returned no value. |
 | `IOLINK_BAD_PORT` | The port number could not be resolved from the message. |
 | `IOLINK_BAD_PAYLOAD` | The payload was not the shape the node needs. |

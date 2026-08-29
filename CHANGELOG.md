@@ -32,6 +32,16 @@ All notable changes to this package are documented here. The format follows
 - `npm run lint` (standard), and a GitHub Actions workflow running the unit
   suite on Node 18 and 22 plus the Node-RED integration test.
 
+- The generic HTTP/JSON profile can find out which device is on a port:
+  `readVendorId`, `readDeviceId`, `readProductName` and `readSerial` join the
+  configurable paths, and a scan fills them in for occupied ports. Without
+  them the profile could report that a port was in use but never which device
+  was in it, so an IODD could not be looked up and `iolink read`, `write` and
+  `param` failed on every generic master with `IOLINK_NO_DEVICE` - a message
+  that blamed the wiring for a gap in the profile. That case is now
+  `IOLINK_NO_IDENTITY` and says what to do about it. An identity path the
+  master refuses is dropped after the first try rather than repeated on every
+  poll.
 - Every setting the nodes honour can now be reached in the editor. **Base URL**
   on the master, and **Re-check**, **Vendor ID** and **Device ID** on the read,
   write and parameter nodes, were read at runtime but had no field to set them,
