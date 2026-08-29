@@ -66,6 +66,16 @@ All notable changes to this package are documented here. The format follows
 
 ### Fixed
 
+- **Test connection** on a generic HTTP/JSON master reported success without
+  sending anything, because that profile's `identify()` answered from its own
+  configuration. It now probes a port, so a wrong host fails the test instead
+  of showing a green tick. (Introduced with the switch from scanning to
+  identifying, above, and never released.)
+- The same failure reported more than once no longer collects a copy of its
+  error code each time. Remembering a failed IODD lookup means handing the very
+  same error to every read inside the retry window, and the reporting helper
+  rewrote its message in place: by the third read a Catch node saw
+  `IODD_NOT_FOUND: IODD_NOT_FOUND: IODD_NOT_FOUND: no IODD for ...`.
 - A device whose IODD is nowhere to be found is remembered as such for a
   configurable time. Every read used to repeat the whole lookup, so one
   unpublished device on a rack sent a request to IODDfinder on every poll —

@@ -133,7 +133,29 @@ test('a scan maps port status onto the common shape', async () => {
   } finally { await master.close() }
 })
 
-test('identify falls back to the base URL when the master has no info endpoint', async () => {
-  const adapter = createAdapter('generic', { url: 'http://10.0.0.9' })
-  assert.deepEqual(await adapter.identify(), { profile: 'generic', url: 'http://10.0.0.9' })
+test('identifying a generic master actually reaches it', async () => {
+  // The editor's connection test runs this. Reporting success without sending
+  // anything would turn a wrong host into a green tick.
+  const master = await restMaster()
+  try {
+    const adapter = createAdapter('generic',
+      { url: master.url, valuePath: 'result.value', timeout: 2000, ports: [1, 2] })
+    const info = await adapter.identify()
+    assert.deepEqual(master.calls.map(c => c.path), ['/iolink/port/1/status'],
+      'with no identify path it should probe the first configured port, once')
+    assert.equal(info.probedPort, 1)
+    assert.equal(info.profile, 'generic')
+  } finally { await master.close() }
+})
+
+test('a generic master that cannot be reached fails the connection test', async () => {
+  const adapter = createAdapter('generic',
+    { url: 'http://127.0.0.1:1', timeout: 1000, valuePath: 'result.value' })
+  await assert.rejects(adapter.identify(), e => e instanceof MasterError && /cannot reach/.test(e.message))
+})
+
+test('a generic master with nothing to ask says so rather than claiming success', async () => {
+  const adapter = createAdapter('generic',
+    { url: 'http://127.0.0.1:1', paths: { readPortStatus: null }, timeout: 1000 })
+  await assert.rejects(adapter.identify(), /nothing to test the connection with/)
 })

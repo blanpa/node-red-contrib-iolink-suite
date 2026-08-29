@@ -359,3 +359,38 @@ test('one failed task does not stop the ones behind it', async () => {
   await after
   assert.deepEqual(done, ['ran'], 'a poll must not be wedged by the one before it')
 })
+
+// ---------------------------------------------------------------- reporting
+
+test('reporting the same failure twice does not stack its code up', async () => {
+  // The IODD store remembers a lookup that failed and hands every read inside
+  // its retry window the very same error object.
+  const { fail } = require('../lib/runtime')
+  const node = { status () {}, error () {} }
+  const shared = Object.assign(new Error('no IODD for vendorId 7, deviceId 8'),
+    { code: 'IODD_NOT_FOUND', vendorId: 7 })
+
+  const seen = []
+  for (let i = 0; i < 3; i++) fail(node, {}, shared, e => seen.push(e))
+
+  for (const e of seen) {
+    assert.equal(e.message, 'IODD_NOT_FOUND: no IODD for vendorId 7, deviceId 8')
+    assert.equal(e.code, 'IODD_NOT_FOUND')
+    assert.equal(e.vendorId, 7, 'the details a Catch node might read must survive')
+  }
+  assert.equal(shared.message, 'no IODD for vendorId 7, deviceId 8',
+    'the stored error itself must not be rewritten')
+})
+
+test('the node status shows the failure, not the code twice over', () => {
+  const { fail } = require('../lib/runtime')
+  const statuses = []
+  const node = { status: s => statuses.push(s), error () {} }
+  const shared = Object.assign(new Error('port 3 reports no IO-Link device'),
+    { code: 'IOLINK_NO_DEVICE' })
+
+  fail(node, {}, shared, () => {})
+  fail(node, {}, shared, () => {})
+  assert.equal(statuses[0].text, statuses[1].text)
+  assert.equal(statuses[1].text, 'port 3 reports no IO-Link device')
+})
