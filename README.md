@@ -249,6 +249,22 @@ docker/       the containers the test suites run in
 examples/     flows offered in Node-RED's Import → Examples menu
 ```
 
+## Releasing
+
+A version tag is a release. Move the changelog's **Unreleased** section under
+the new version, then:
+
+```bash
+npm version minor          # bumps package.json, commits, tags v0.2.0
+git push --follow-tags
+```
+
+The `publish` workflow checks that the tag matches `package.json`, runs lint,
+the unit suite and the Node-RED integration test on the tagged commit,
+publishes to npm with provenance, and creates a GitHub release with that
+version's changelog section as its notes. It needs an npm automation token
+in the repository secret `NPM_TOKEN`.
+
 ## The simulator
 
 `test/fake-master.js` is a stand-in for an ifm IoT Core master: the same request

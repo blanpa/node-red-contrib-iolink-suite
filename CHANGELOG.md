@@ -58,6 +58,10 @@ All notable changes to this package are documented here. The format follows
   came from a master.
 - `npm run lint` (standard), and a GitHub Actions workflow running the unit
   suite on Node 18 and 22 plus the Node-RED integration test.
+- A release workflow: pushing a version tag (`v0.2.0`) checks that it matches
+  `package.json`, runs lint, the unit suite and the Node-RED integration test
+  on the tagged commit, publishes to npm with provenance, and cuts a GitHub
+  release whose notes are this file's section for that version.
 
 - The generic HTTP/JSON profile can find out which device is on a port:
   `readVendorId`, `readDeviceId`, `readProductName` and `readSerial` join the

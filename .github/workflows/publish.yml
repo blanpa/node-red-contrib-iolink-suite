@@ -1,0 +1,72 @@
+name: publish
+
+# A version tag publishes the package to npm and cuts a GitHub release.
+#
+#   npm version minor        # bumps package.json, commits, tags v0.2.0
+#   git push --follow-tags
+#
+# The tag has to match the version in package.json, the tests have to pass on
+# the tagged commit, and the package is published with provenance, so npm can
+# show which commit and which workflow run it came from. Publishing needs an
+# npm automation token in the repository secret NPM_TOKEN.
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: write   # the GitHub release
+  id-token: write   # npm provenance
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: https://registry.npmjs.org
+          cache: npm
+
+      - name: The tag must be the version in package.json
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          version="$(node -p "require('./package.json').version")"
+          if [ "$tag" != "$version" ]; then
+            echo "tag v$tag does not match package.json version $version" >&2
+            exit 1
+          fi
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+
+      # The nodes installed from the packed tarball into the official Node-RED
+      # image: a release must not ship without the same check as every push.
+      - run: docker compose -f docker-compose.test.yml run --rm --build integration
+
+      - name: Publish to npm
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Release notes from the changelog
+        # The section for this version, from "## [x.y.z]" to the next "## [".
+        # A tag without a section falls back to a pointer at the changelog.
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v v="$version" '
+            $0 ~ "^## \\[" v "\\]" { on = 1; next }
+            on && /^## \[/ { exit }
+            on { print }
+          ' CHANGELOG.md > notes.md
+          if [ ! -s notes.md ]; then
+            echo "See CHANGELOG.md for what changed in $version." > notes.md
+          fi
+
+      - name: GitHub release
+        run: gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file notes.md
+        env:
+          GH_TOKEN: ${{ github.token }}
