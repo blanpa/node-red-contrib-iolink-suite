@@ -1,6 +1,6 @@
 {
   "name": "node-red-contrib-iolink-suite",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "Node-RED nodes for IO-Link masters: read and write process data decoded through the device's IODD, read and write ISDU parameters by name, and decode raw IO-Link bytes from any source.",
   "license": "Apache-2.0",
   "author": "blanpa",

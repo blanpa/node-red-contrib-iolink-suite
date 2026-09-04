@@ -6,6 +6,15 @@ All notable changes to this package are documented here. The format follows
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.0.1] - 2026-09-04
+
+First release: `iolink master`, `iolink read`, `iolink write`, `iolink param`,
+`iolink scan`, `iolink event` and `iodd decode`, with master profiles for
+ifm IoT Core, the IO-Link Community's JSON API and a generic HTTP/JSON master.
+The entries below are what changed on the way to it.
+
 ### Added
 
 - A profile for the IO-Link Community's **JSON Integration for IO-Link**
@@ -226,9 +235,3 @@ All notable changes to this package are documented here. The format follows
   what the other had just recorded, so a change could be reported twice or lost.
 - A read that was already in flight no longer delivers its message after the
   node has been closed.
-
-## [0.1.0]
-
-First release: `iolink master`, `iolink read`, `iolink write`, `iolink param`,
-`iolink scan`, `iolink event` and `iodd decode`, with the ifm IoT Core and
-generic HTTP/JSON master profiles.
