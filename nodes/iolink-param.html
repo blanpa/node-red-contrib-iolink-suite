@@ -1,6 +1,6 @@
 <script type="text/javascript">
   RED.nodes.registerType('iolink-param', {
-    category: 'IO-Link',
+    category: 'IO Link Suite',
     color: '#c0deed',
     defaults: {
       name: { value: '' },
@@ -17,7 +17,7 @@
     },
     inputs: 1,
     outputs: 1,
-    icon: 'iolink-param.svg',
+    icon: 'iolink.svg',
     label: function () {
       return this.name || ((this.action || 'read') + ' ' + (this.parameter || 'parameter'))
     },
@@ -32,30 +32,71 @@
         typeField: '#node-input-parameterType',
         types: ['str', 'msg', 'flow', 'global', 'env']
       })
+      // The field holds one parameter or a comma-separated list of them, so
+      // clicking the list adds and removes rather than replacing: picking a
+      // second parameter should not silently discard the first.
+      const field = $('#node-input-parameter')
+
+      function chosen () {
+        if (field.typedInput('type') !== 'str') return []
+        return String(field.typedInput('value') || '')
+          .split(',').map(function (name) { return name.trim() }).filter(Boolean)
+      }
+
+      function choose (names) {
+        field.typedInput('type', 'str')
+        field.typedInput('value', names.join(', '))
+      }
+
+      function markChosen (list) {
+        const names = chosen()
+        list.find('[data-parameter]').each(function () {
+          const row = $(this)
+          const on = names.indexOf(row.attr('data-parameter')) >= 0
+          row.css({ fontWeight: on ? 'bold' : 'normal', background: on ? '#eef3f7' : '' })
+        })
+      }
+
       $('#iolink-load').on('click', function () {
         const masterId = $('#node-input-master').val()
-        const port = $('#node-input-port').val()
+        const port = Number($('#node-input-port').val())
         const status = $('#iolink-load-status').text('loading…').css('color', '')
         if (!masterId || masterId === '_ADD_') {
           return status.css('color', '#a44').text('choose and deploy a master first')
         }
-        $.getJSON('iolink-suite/parameters/' + masterId + '/' + encodeURIComponent(port))
+        // Only a port typed into the field can be asked about; one that comes
+        // from a message is a property name here, and not a port until a
+        // message arrives.
+        if ($('#node-input-portType').val() !== 'num' || !Number.isInteger(port) || port < 1) {
+          return status.css('color', '#a44')
+            .text('type the port here to load its parameters — a port that comes from a message is not known yet')
+        }
+        $.getJSON('iolink-suite/parameters/' + masterId + '/' + port)
           .done(function (result) {
             status.css('color', '#4a4').text(
               result.device.vendorName + ' — ' + result.parameters.length + ' parameters')
             const list = $('#iolink-parameters').empty()
+            $('<div class="form-tips">').css({ marginBottom: '4px' })
+              .text('Click to add a parameter, click again to take it out.')
+              .appendTo(list)
             result.parameters.forEach(function (p) {
               const label = p.index + '  ' + p.name +
                 '  (' + p.access + (p.unit ? ', ' + p.unit : '') + ')' +
                 (p.standard ? '  ·  standard' : '')
-              $('<div>').css({ padding: '2px 0', cursor: 'pointer' })
+              $('<div>').css({ padding: '2px 4px', cursor: 'pointer' })
+                .attr('data-parameter', p.name)
                 .text(label)
                 .on('click', function () {
-                  $('#node-input-parameter').typedInput('type', 'str')
-                  $('#node-input-parameter').typedInput('value', p.name)
+                  const names = chosen()
+                  const at = names.indexOf(p.name)
+                  if (at >= 0) names.splice(at, 1)
+                  else names.push(p.name)
+                  choose(names)
+                  markChosen(list)
                 })
                 .appendTo(list)
             })
+            markChosen(list)
           })
           .fail(function (xhr) {
             const body = xhr.responseJSON || {}
@@ -104,11 +145,18 @@
     <input type="text" id="node-input-parameter" placeholder="Switch point, or an index">
     <input type="hidden" id="node-input-parameterType">
   </div>
+  <div class="form-row" style="margin-top:-6px">
+    <label>&nbsp;</label>
+    <span style="color:#888">one parameter, or several separated by commas</span>
+  </div>
   <div class="form-row">
     <label for="node-input-subindex"><i class="fa fa-list-ol"></i> Subindex</label>
     <input type="text" id="node-input-subindex" style="width:100px" placeholder="0">
+    <span style="color:#888">0 is the whole parameter, not one of its fields</span>
+  </div>
 
   <hr>
+  <h4 style="margin:0 0 10px">Device identity</h4>
   <div class="form-row">
     <label for="node-input-identityTtl"><i class="fa fa-hourglass-half"></i> Re-check</label>
     <input type="text" id="node-input-identityTtl" style="width:100px" placeholder="30000"> ms
@@ -125,16 +173,6 @@
     a master that cannot report a device's identity, or to hold one port to one
     device type — the node then loads that IODD and never asks.
   </div>
-
-  <h3>Device identity</h3>
-  <p>The node normally asks the port which device is on it and caches the answer
-     for <b>Re-check</b>, since asking before every read would triple the traffic
-     to the master. Shorten it if devices are swapped while the flow runs;
-     lengthen it for a rack that never changes.</p>
-  <p>Setting <b>Vendor ID</b> and <b>Device ID</b> pins the device instead: the
-     node loads that IODD and stops asking. That is the answer for a master whose
-     API cannot report an identity, and a way to make a port refuse to decode
-     anything but the device it is meant to carry.</p>
 </script>
 
 <script type="text/html" data-help-name="iolink-param">
@@ -147,15 +185,36 @@
      Both vendor parameters and the specification's standard objects
      (SerialNumber, ApplicationSpecificTag, …) are listed.</p>
 
+  <h3>One parameter, or several</h3>
+  <p>Several are given as a list — <code>Switch point, Output polarity</code>, or
+     an array from a message. Clicking the loaded list adds and removes rather
+     than replacing. Each one is still its own ISDU request; what this saves is
+     the flow, not the traffic: one node and one message instead of five nodes
+     in a line and a join to put them back together.</p>
+  <p>One parameter produces the message it always did, the value directly under
+     <code>msg.payload</code>. Several produce one message keyed by the name the
+     IODD gives each parameter, with <code>meta</code> and <code>iolink</code>
+     keyed the same way — so asking by index and asking by name produce the same
+     message. A parameter the device will not give up is left out and named
+     under <code>msg.errors</code>; only when none of them answers does the node
+     fail.</p>
+  <p><b>Writing</b> several needs a payload keyed by parameter
+     (<code>{"Switch point": 30, "Output polarity": 0}</code>). A payload that is
+     not an object is refused rather than written to the first parameter and
+     guessed at for the rest. <b>Subindex</b> applies to every parameter in the
+     list, which is why it is normally left at 0.</p>
+
   <h3>Input</h3>
   <dl class="message-properties">
     <dt>payload <span class="property-type">any</span></dt>
     <dd>For a write: the value, in engineering units. Enumerated parameters accept
         the IODD's own wording.</dd>
-    <dt>parameter <span class="property-type">string | number</span></dt>
-    <dd>Overrides the configured parameter.</dd>
+    <dt>parameter <span class="property-type">string | number | array</span></dt>
+    <dd>Overrides the configured parameter, whatever the node is set to.</dd>
     <dt>subindex <span class="property-type">number</span></dt>
-    <dd>Overrides the configured subindex.</dd>
+    <dd>Overrides the configured subindex. Anything but a whole number from 0
+        to 255 is refused (<code>IOLINK_BAD_SUBINDEX</code>) before the device
+        is asked.</dd>
     <dt>action <span class="property-type">string</span></dt>
     <dd><code>read</code> or <code>write</code>, overriding the configuration.</dd>
   </dl>
@@ -165,5 +224,18 @@
      unit, range and enum text, and <code>msg.iolink</code> the index, subindex and
      raw hex actually exchanged.</p>
   <p>Writing a parameter the IODD marks read-only fails before anything is sent to
-     the device, as does a value outside its declared range.</p>
+     the device, as does a value outside its declared range. A record written as
+     a whole, and a value the master returns, must be proper hex: an odd number
+     of digits or a stray character is refused (<code>IOLINK_BAD_HEX</code>)
+     rather than silently cut short.</p>
+
+  <h3>Device identity</h3>
+  <p>The node normally asks the port which device is on it and caches the answer
+     for <b>Re-check</b>, since asking before every access would double the
+     traffic to the master. Shorten it if devices are swapped while the flow
+     runs; lengthen it for a rack that never changes.</p>
+  <p>Setting <b>Vendor ID</b> and <b>Device ID</b> pins the device instead: the
+     node loads that IODD and stops asking. That is the answer for a master whose
+     API cannot report an identity, and a way to make a port refuse to address
+     anything but the device it is meant to carry.</p>
 </script>

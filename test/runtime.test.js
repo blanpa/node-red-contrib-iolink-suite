@@ -428,3 +428,72 @@ test('an empty port still says the port is empty', async () => {
   assert.equal(error.code, 'IOLINK_NO_DEVICE')
   assert.match(error.message, /port 3 reports no IO-Link device \(no device\)/)
 })
+
+test('a master that cannot be asked is reported as such, and not cached', async () => {
+  const { sharedIdentityCache } = require('../lib/runtime')
+  let reachable = false
+  const adapter = {
+    scans: 0,
+    async scanPorts ([port]) {
+      this.scans++
+      return reachable
+        ? [{ port, connected: true, vendorId: 999, deviceId: 4242 }]
+        : [{ port, error: 'cannot reach http://10.0.0.9/: connect ECONNREFUSED' }]
+    }
+  }
+  const master = { adapter, iodd: store(), parseOptions: () => ({}) }
+  const cache = sharedIdentityCache(master)
+
+  const error = await resolveDevice(master, 1, { identityCache: cache }).then(() => null, e => e)
+  assert.equal(error.code, 'IOLINK_MASTER_UNREACHABLE')
+  assert.match(error.message, /port 1 could not be asked.*ECONNREFUSED/)
+
+  // The master comes back: the very next read must ask it again rather than
+  // serve the outage from the cache for the rest of the TTL.
+  reachable = true
+  const { device } = await resolveDevice(master, 1, { identityCache: cache })
+  assert.equal(device.identity.deviceId, 4242)
+  assert.equal(adapter.scans, 2)
+})
+
+test('the identity cache is shared per master, and the shortest wish refreshes it', async () => {
+  const { sharedIdentityCache } = require('../lib/runtime')
+  const adapter = countingAdapter()
+  const master = { adapter }
+  assert.equal(sharedIdentityCache(master), sharedIdentityCache(master), 'one cache per master')
+
+  const cache = sharedIdentityCache(master)
+  await cache.get(adapter, 1, { ttl: 60000 })
+  await cache.get(adapter, 1, { ttl: 60000 })
+  assert.equal(adapter.scans, 1, 'a second node within its TTL is served from the cache')
+  await cache.get(adapter, 1, { ttl: 0 })
+  assert.equal(adapter.scans, 2, 'a node that accepts nothing stale refreshes for everyone')
+})
+
+test('describeDevice prefers the product name the master reports', () => {
+  const { describeDevice } = require('../lib/runtime')
+  const device = {
+    identity: {
+      vendorName: 'Test Instruments GmbH',
+      vendorId: 999,
+      deviceId: 4242,
+      variants: [{ productId: 'DEMO-100' }, { productId: 'DEMO-110' }],
+      deviceName: 'Demo Temperature Sensor'
+    }
+  }
+  // A family IODD: the first variant is not necessarily the one on the port.
+  assert.equal(describeDevice(device, { productName: 'DEMO-110', serial: 'x' }, 2).product, 'DEMO-110')
+  assert.equal(describeDevice(device, { serial: 'x' }, 2).product, 'DEMO-100')
+  assert.equal(describeDevice(device, null, 2).product, 'DEMO-100')
+})
+
+test('parseHex refuses what Buffer.from would silently cut short', () => {
+  const { parseHex } = require('../lib/runtime')
+  assert.equal(parseHex('09 2B'), '092b')
+  assert.equal(parseHex('0x092b'), '092b')
+  assert.equal(parseHex(''), '')
+  for (const bad of ['092', 'ERR', '0x1', 'zz', null]) {
+    assert.throws(() => parseHex(bad, 'the value'),
+      e => e.code === 'IOLINK_BAD_HEX' && /^the value (is not hex|has an odd number)/.test(e.message))
+  }
+})

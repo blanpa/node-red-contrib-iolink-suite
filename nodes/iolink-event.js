@@ -54,11 +54,23 @@ module.exports = function (RED) {
     }
 
     async function pollOnce (send) {
-      const states = await master.adapter.scanPorts(ports)
+      const scanned = await master.adapter.scanPorts(ports)
       const messages = []
+      const states = []
 
-      for (const state of states) {
-        if (wantsDeviceStatus && state.connected) {
+      for (const answer of scanned) {
+        const before = previous.get(answer.port)
+        // A port the master could not be asked about has not changed; the
+        // master has gone quiet. The last known state is carried forward under
+        // an "unreachable" flag, so an outage is reported as an outage rather
+        // than as every device on the rack disappearing, and the master
+        // coming back is not every device appearing again.
+        const state = answer.error
+          ? { ...(before || { port: answer.port }), unreachable: true, error: answer.error }
+          : { ...answer, unreachable: false, error: undefined }
+        states.push(state)
+
+        if (wantsDeviceStatus && state.connected && !state.unreachable) {
           try {
             Object.assign(state, await readDeviceStatus(master.adapter, state.port))
           } catch (e) {
@@ -69,10 +81,11 @@ module.exports = function (RED) {
         }
         // Watched as one field: any change in the standing events is a change
         // worth a message, without putting the whole list in the comparison.
-        state.deviceEventCodes = (state.deviceEvents || [])
-          .map(e => e.hex).sort().join(',') || undefined
+        if (!state.unreachable) {
+          state.deviceEventCodes = (state.deviceEvents || [])
+            .map(e => e.hex).sort().join(',') || undefined
+        }
 
-        const before = previous.get(state.port)
         previous.set(state.port, state)
         const changes = diff(before, state)
         // The first poll establishes the baseline. Reporting every port as a
@@ -93,7 +106,9 @@ module.exports = function (RED) {
             deviceStatusError: state.deviceStatusError,
             vendorId: state.vendorId,
             deviceId: state.deviceId,
-            productName: state.productName
+            productName: state.productName,
+            unreachable: state.unreachable,
+            error: state.error
           },
           changes,
           event: classify(before, state),
@@ -102,19 +117,7 @@ module.exports = function (RED) {
       }
 
       started = true
-      const connected = states.filter(s => s.connected).length
-      const unwell = states.filter(s => s.deviceStatus > 0)
-      node.status(unwell.length
-        ? {
-            fill: 'yellow',
-            shape: 'dot',
-            text: `port ${unwell[0].port}: ${DEVICE_STATUS[unwell[0].deviceStatus]}`
-          }
-        : {
-            fill: connected ? 'green' : 'yellow',
-            shape: 'dot',
-            text: `${connected}/${states.length} ports connected`
-          })
+      node.status(statusFor(states))
       if (messages.length) send([messages])
     }
 
@@ -130,8 +133,36 @@ module.exports = function (RED) {
     })
   }
 
+  /** What the node shows under itself after a poll. */
+  function statusFor (states) {
+    const unreachable = states.filter(s => s.unreachable).length
+    if (unreachable) {
+      return {
+        fill: 'red',
+        shape: 'ring',
+        text: unreachable === states.length
+          ? 'master unreachable'
+          : `master unreachable on ${unreachable}/${states.length} ports`
+      }
+    }
+    const unwell = states.find(s => s.deviceStatus > 0)
+    if (unwell) {
+      return {
+        fill: 'yellow',
+        shape: 'dot',
+        text: `port ${unwell.port}: ${DEVICE_STATUS[unwell.deviceStatus]}`
+      }
+    }
+    const connected = states.filter(s => s.connected).length
+    return {
+      fill: connected ? 'green' : 'yellow',
+      shape: 'dot',
+      text: `${connected}/${states.length} ports connected`
+    }
+  }
+
   const WATCHED = ['connected', 'status', 'mode', 'vendorId', 'deviceId',
-    'deviceStatus', 'deviceEventCodes']
+    'deviceStatus', 'deviceEventCodes', 'unreachable']
 
   function diff (before, after) {
     if (!before) return WATCHED.filter(k => after[k] !== undefined).map(k => ({ field: k, to: after[k] }))
@@ -140,8 +171,17 @@ module.exports = function (RED) {
       .map(k => ({ field: k, from: before[k], to: after[k] }))
   }
 
-  /** Describe the transition in the terms the specification uses. */
+  /**
+   * Describe the transition in the terms the specification uses.
+   *
+   * The master going quiet and coming back has no event code of its own in
+   * the specification, which only knows the port; it is reported under the
+   * master's name so a flow can tell a rack outage from a device event.
+   */
   function classify (before, after) {
+    if (after.unreachable) {
+      return { scope: 'master', name: 'Master unreachable', type: 'error', direction: 'unreachable' }
+    }
     if (before && !before.connected && after.connected) {
       return { ...lookupEvent(0xff21, 'port'), direction: 'appeared' }
     }
@@ -150,6 +190,9 @@ module.exports = function (RED) {
     }
     if (before && before.deviceId !== after.deviceId && after.deviceId !== undefined) {
       return { ...lookupEvent(0x1803, 'port'), direction: 'device changed' }
+    }
+    if (before && before.unreachable) {
+      return { scope: 'master', name: 'Master reachable again', type: 'notification', direction: 'reachable' }
     }
     return { ...lookupEvent(0xff26, 'port'), direction: 'status changed' }
   }

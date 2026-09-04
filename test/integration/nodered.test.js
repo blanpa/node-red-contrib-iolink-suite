@@ -62,14 +62,28 @@ test('the editor half of every node is served', async () => {
 
 test('the node icons are served by the editor', async () => {
   // The icons live in a directory Node-RED only finds if the package shipped
-  // it - which is exactly the sort of thing that works locally and not once
-  // installed.
-  for (const icon of ['iolink-read.svg', 'iolink-write.svg', 'iolink-param.svg',
-    'iolink-scan.svg', 'iolink-event.svg', 'iodd-decode.svg']) {
+  // it, and only where the registry looks: <module>/nodes/icons. Get that
+  // wrong and nothing breaks - the URL answers 200 with Node-RED's own
+  // fallback arrow, so asking for the icon is not enough to know it arrived.
+  // The registry's own listing is: a module whose icons were never found is
+  // in it with an empty array.
+  const listing = await fetch(`${BASE}/icons`).then(r => r.json())
+  const ours = listing['node-red-contrib-iolink-suite']
+  assert.ok(ours, 'the suite is not in the icon listing at all')
+  assert.ok(ours.length,
+    'Node-RED found no icons for the suite - are they still in nodes/icons?')
+
+  // Whatever the registry found is what the nodes get, so check all of it
+  // rather than a list kept in step by hand: the unit suite already pins the
+  // icons to the nodes that ask for them, and adding one here should not need
+  // a test edit.
+  for (const icon of ours) {
     const res = await fetch(`${BASE}/icons/node-red-contrib-iolink-suite/${icon}`)
     assert.equal(res.status, 200, `${icon} is not served`)
     const body = await res.text()
     assert.match(body, /<svg/, `${icon} came back as something other than an SVG`)
+    // Ours is the black mark; every icon Node-RED falls back to is white.
+    assert.match(body, /fill="#000"/, `${icon} came back as a stand-in, not ours`)
   }
 })
 
@@ -174,4 +188,29 @@ test('the editor endpoints answer for a deployed master', async () => {
   const parameters = await api('/iolink-suite/parameters/cfg-master/1')
   assert.equal(parameters.status, 200, JSON.stringify(parameters.body))
   assert.ok(parameters.body.parameters.some(p => p.index === 100 && p.name === 'Switch point'))
+})
+
+test('one read node reads several ports, keyed by port', async () => {
+  // The rack here is the fixed one: a device on port 1, port 2 empty. That is
+  // the more valuable case to run in a real runtime, because it exercises both
+  // halves at once - the message is keyed by port because two ports were asked
+  // for, and the port that had nothing on it is reported rather than lost.
+  const { status, body } = await api('/read-many')
+  assert.equal(status, 200, `multi read failed: ${JSON.stringify(body)}`)
+  assert.deepEqual(Object.keys(body.payload), ['1'])
+  assert.equal(body.payload[1].Temperature, 23.47)
+  assert.equal(body.meta[1].Temperature.unit, '°C')
+  assert.equal(body.device[1].port, 1)
+  assert.equal(body.iolink[1].raw, '092b0929')
+  assert.match(body.errors[2], /IOLINK_NO_DEVICE/,
+    'the empty port should be named, not silently dropped')
+})
+
+test('one param node reads several parameters, keyed by name', async () => {
+  const { body } = await api('/param-many')
+  assert.deepEqual(Object.keys(body.payload).sort(), ['Output polarity', 'Switch point'])
+  assert.equal(body.meta['Switch point'].unit, '°C')
+  assert.equal(body.iolink['Switch point'].index, 100)
+  // One device, so it stays where a single-parameter read puts it.
+  assert.equal(body.device.port, 1)
 })

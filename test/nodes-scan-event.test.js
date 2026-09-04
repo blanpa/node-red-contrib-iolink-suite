@@ -10,7 +10,7 @@ async function setup (file, type, config = {}) {
   const RED = loadNodes(file)
   withMaster(RED, createAdapter('ifm', { url: master.url, timeout: 2000 }))
   const node = RED.create(type, { master: 'master-1', ...config })
-  return { node, master, close: async () => { await node.close(); await master.close() } }
+  return { node, master, RED, close: async () => { await node.close(); await master.close() } }
 }
 
 // ------------------------------------------------------------------ scan node
@@ -288,5 +288,50 @@ test('iolink-event below the floor still polls at a sane rate', async () => {
   try {
     await new Promise(resolve => setTimeout(resolve, 120))
     assert.ok(node.sent.length <= 1)
+  } finally { await close() }
+})
+
+test('iolink-event reports a master going quiet as an outage, not as every device leaving', async () => {
+  const { node, RED, close } = await eventNode()
+  try {
+    const adapter = RED.nodes.getNode('master-1').adapter
+    const scanPorts = adapter.scanPorts.bind(adapter)
+    adapter.scanPorts = async ports => ports.map(port => ({ port, error: 'cannot reach it' }))
+
+    const [down] = await node.receive({})
+    const outage = down[0]
+    assert.equal(outage.length, 2, 'one message per watched port')
+    assert.ok(outage.every(m => m.event.direction === 'unreachable'))
+    assert.ok(outage.every(m => m.payload.unreachable === true && m.payload.error === 'cannot reach it'))
+    assert.equal(outage.find(m => m.payload.port === 1).payload.connected, true,
+      'the last known state is carried: the device has not gone, the master has')
+    assert.equal(node.lastStatus.fill, 'red')
+    assert.match(node.lastStatus.text, /master unreachable/)
+
+    // Still down: nothing new to say.
+    assert.deepEqual(await node.receive({}), [])
+
+    // Back, with the same devices: reachable again, and no "device appeared".
+    adapter.scanPorts = scanPorts
+    const [up] = await node.receive({})
+    assert.equal(up[0].length, 2)
+    assert.ok(up[0].every(m => m.event.direction === 'reachable' && m.payload.unreachable === false))
+    assert.match(node.lastStatus.text, /1\/2 ports connected/)
+  } finally { await close() }
+})
+
+test('a device that left while the master was down is reported as gone when it returns', async () => {
+  const { node, RED, master, close } = await eventNode()
+  try {
+    const adapter = RED.nodes.getNode('master-1').adapter
+    const scanPorts = adapter.scanPorts.bind(adapter)
+    adapter.scanPorts = async ports => ports.map(port => ({ port, error: 'cannot reach it' }))
+    await node.receive({})
+
+    master.state.ports[1].status = 0
+    adapter.scanPorts = scanPorts
+    const [sent] = await node.receive({})
+    assert.equal(sent[0].find(m => m.payload.port === 1).event.direction, 'disappeared')
+    assert.equal(sent[0].find(m => m.payload.port === 2).event.direction, 'reachable')
   } finally { await close() }
 })

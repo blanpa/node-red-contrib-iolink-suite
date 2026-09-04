@@ -1,5 +1,6 @@
 'use strict'
-const { PortIdentityCache, resolveDevice, fail, resolvePort } = require('../lib/runtime')
+const { sharedIdentityCache, resolveDevice, describeDevice, fail, resolvePort } =
+  require('../lib/runtime')
 
 module.exports = function (RED) {
   /**
@@ -19,7 +20,8 @@ module.exports = function (RED) {
       return
     }
 
-    const identityCache = new PortIdentityCache(Number(config.identityTtl) || 30000)
+    const identityCache = sharedIdentityCache(master)
+    const identityTtl = Number(config.identityTtl) || 30000
     const merge = config.merge !== false
 
     node.on('input', async function (msg, send, done) {
@@ -34,6 +36,7 @@ module.exports = function (RED) {
 
         const { device, status } = await resolveDevice(master, port, {
           identityCache,
+          identityTtl,
           vendorId: config.vendorId ? Number(config.vendorId) : undefined,
           deviceId: config.deviceId ? Number(config.deviceId) : undefined
         })
@@ -68,12 +71,7 @@ module.exports = function (RED) {
           ...msg,
           payload: values,
           iolink: { raw: hex, layout: layout.id, octets: layout.octetLength, merged: Boolean(base) },
-          device: {
-            vendor: device.identity.vendorName,
-            product: (device.identity.variants[0] || {}).productId,
-            serial: status && status.serial,
-            port
-          },
+          device: describeDevice(device, status, port),
           timestamp: new Date().toISOString()
         })
         if (done) done()
@@ -81,8 +79,6 @@ module.exports = function (RED) {
         fail(node, msg, e, done)
       }
     })
-
-    node.on('close', function (done) { identityCache.clear(); done() })
   }
 
   function collectValues (msg, config) {

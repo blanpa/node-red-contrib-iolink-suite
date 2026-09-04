@@ -1,6 +1,6 @@
 <script type="text/javascript">
   RED.nodes.registerType('iolink-event', {
-    category: 'IO-Link',
+    category: 'IO Link Suite',
     color: '#c0deed',
     defaults: {
       name: { value: '' },
@@ -11,7 +11,7 @@
     },
     inputs: 1,
     outputs: 1,
-    icon: 'iolink-event.svg',
+    icon: 'iolink.svg',
     label: function () {
       return this.name || (this.ports ? 'events port ' + this.ports : 'IO-Link events')
     },
@@ -104,6 +104,17 @@
         appeared, device disappeared, device changed, status changed — with the
         matching EventCode and its description.</dd>
   </dl>
+
+  <h3>When the master goes quiet</h3>
+  <p>A master that does not answer is reported as an outage of the master, not
+     as every device on the rack disappearing: one message per watched port
+     with <code>event.direction</code> <code>unreachable</code>,
+     <code>payload.unreachable</code> true and the reason in
+     <code>payload.error</code>, while the rest of the payload keeps the last
+     known state. The master coming back is <code>reachable</code>. A device
+     that really did leave while the master was down is reported as
+     disappeared when the master returns, since its state then differs from the
+     last one seen.</p>
 
   <h3>Device status</h3>
   <p>Ticked, the node also reads <code>DeviceStatus</code> (ISDU index 36) and

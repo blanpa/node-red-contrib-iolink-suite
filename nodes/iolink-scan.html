@@ -1,6 +1,6 @@
 <script type="text/javascript">
   RED.nodes.registerType('iolink-scan', {
-    category: 'IO-Link',
+    category: 'IO Link Suite',
     color: '#c0deed',
     defaults: {
       name: { value: '' },
@@ -10,7 +10,7 @@
     },
     inputs: 1,
     outputs: 1,
-    icon: 'iolink-scan.svg',
+    icon: 'iolink.svg',
     label: function () { return this.name || 'scan master' },
     oneditprepare: function () {
       $('#iolink-scan').on('click', function () {
@@ -58,10 +58,9 @@
     <input type="text" id="node-input-ports" placeholder="all ports">
   </div>
   <div class="form-row">
-    <label for="node-input-resolveIodd" style="width:auto">
-      <input type="checkbox" id="node-input-resolveIodd" style="width:auto;vertical-align:top">
-      Look the IODD up for each device
-    </label>
+    <label for="node-input-resolveIodd"><i class="fa fa-file-o"></i> IODD</label>
+    <input type="checkbox" id="node-input-resolveIodd" style="width:auto">
+    <span>Look the IODD up for each device</span>
   </div>
   <div class="form-row">
     <button type="button" class="red-ui-button" id="iolink-scan">

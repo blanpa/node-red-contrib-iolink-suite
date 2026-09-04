@@ -8,6 +8,34 @@ All notable changes to this package are documented here. The format follows
 
 ### Added
 
+- A profile for the IO-Link Community's **JSON Integration for IO-Link**
+  (spec 10.222, V1.0.0), the REST interface Balluff, Pepperl+Fuchs and others
+  share: `/iolink/v1`, byte arrays, device aliases, the specification's error
+  objects. Aliases are looked up from the master and re-looked-up when one is
+  refused, so a port renamed in the master's configuration keeps working. A
+  gateway with several masters is addressed by **Master no.** in the dialog.
+  Built from the specification's OpenAPI document and tested against a stand-in
+  that speaks it (`test/fake-jsonapi-master.js`).
+- `npm run record` (`scripts/record-master.js`) sends every read a profile
+  relies on to a real master and stores the raw exchanges under `recordings/`,
+  so a profile can be checked against hardware and a difference reported with
+  the evidence attached. Nothing is written to the master or a device.
+- `iolink read` reads several ports at once: **Port** takes a list (`1,3` as a
+  string, or an array from a message), and one message comes back keyed by
+  port — `msg.payload[1].Temperature` where the single-port form says
+  `msg.payload.Temperature`, with `meta`, `device` and `iolink` keyed to match.
+  One port produces exactly the message it always did, so no flow changes shape
+  because this became possible. The ports are read one after another rather
+  than at once, and a port that does not answer is named under `msg.errors`
+  instead of costing the others their reading. In split mode the port joins the
+  topic, because two devices of one type carry the same value names.
+- `iolink param` reads and writes several parameters at once, given as a list
+  or an array. The message is keyed by the name the IODD gives each parameter,
+  so asking by index and asking by name produce the same message. Writing
+  several takes a payload keyed by parameter; a payload that is not an object
+  is refused rather than written to the first and guessed at for the rest.
+  Clicking the loaded parameter list now adds and removes instead of replacing.
+
 - `iolink event` can read device diagnosis: `DeviceStatus` (ISDU 36) and
   `DetailedDeviceStatus` (ISDU 37), decoded into the EventCodes a device is
   currently signalling with their meaning, type and whether they just appeared.
@@ -21,11 +49,10 @@ All notable changes to this package are documented here. The format follows
   `fake-master` container.
 - `encodeEventQualifier()` and `encodeDetailedDeviceStatus()`, the counterparts
   of the decoders, so the diagnosis objects can be built as well as read.
-- Node icons of the suite's own, replacing the borrowed Font Awesome glyphs.
-  Each node is dominated by its own shape, so a flow can be read at a glance:
-  an arrow out of the device for read and into it for write, sliders for
-  parameters, a lens over an M12 connector face for scan, a warning sign for
-  events, and octets over named values for `iodd decode`.
+- An icon of the suite's own, replacing the borrowed Font Awesome glyphs: the
+  letters IO, drawn as shapes rather than set in a font. Every node in the
+  suite wears it, so the suite reads as one group in a flow rather than as
+  six unrelated nodes.
 - Example flows in Node-RED's **Import → Examples** menu: reading a sensor,
   commissioning a master, watching device health, and decoding bytes that never
   came from a master.
@@ -55,6 +82,46 @@ All notable changes to this package are documented here. The format follows
 
 ### Changed
 
+- The README and the master dialog no longer call the ifm profile "verified
+  against the real API". It was built from ifm's documentation and tested
+  against the stand-in in `test/`, like every other profile, and nothing in
+  the repository had been run against a master. The dialog now says, next to
+  the profile, what each one rests on; the generic profile's default paths
+  are named as the placeholders they are rather than as Balluff's or Turck's.
+- An ifm master that answers a port request with a rejection (a port that
+  does not exist, say) is reported as that port's state, not as the master
+  being unreachable.
+- The port identity cache belongs to the master node rather than to each read,
+  write and parameter node: three nodes on one port ask it once instead of
+  three times, and each node's **Re-check** says how old an answer it will
+  take, so the node with the shortest one refreshes the entry for the others.
+- The `device` block on every message names the product the master reports,
+  and falls back to the IODD's first variant only when the master does not
+  say. A family IODD covers several products, and the first listed was not
+  necessarily the one on the port. `iolink write` and `iolink param` now
+  carry the same `device` block as `iolink read` (vendor and device id, serial)
+  through one shared `describeDevice()`.
+- `iolink read` warns once when a selected value is not in the device's
+  process data (after a firmware update, a changed key style, or a different
+  device on the port), naming the value and what the device does carry.
+  Before, the value was silently left out, which looked like a sensor that
+  had stopped reporting.
+- `iolink param` refuses a subindex that is not a whole number from 0 to 255
+  (`IOLINK_BAD_SUBINDEX`) before asking the device, and refuses a value the
+  master returns, or a record to be written, that is not proper hex
+  (`IOLINK_BAD_HEX`) rather than letting `Buffer.from` cut it short. The
+  editor's parameter picker says so when the port field holds a message
+  property rather than a number, instead of asking the master about port
+  NaN; the picker endpoints answer 400 to such a port.
+
+- The long edit dialogs are divided into named sections rather than separated
+  by bare rules: **Connection**, **IODD** and **Generic profile** on the master,
+  **Device identity** on read, write and param. The two checkbox rows that put
+  their label inside the tick now match the other five, so every dialog keeps
+  one column of labels.
+- Every node in the palette carries the same colour. `iodd decode` used to be
+  green because it is the one node that needs no master, which made it look
+  like it came from a different package.
 - The whole suite is one package. The IODD parser moved from its own workspace
   into `lib/iodd` and is no longer published separately as `iodd-parser`;
   `require('node-red-contrib-iolink-suite')` gives the same API.
@@ -76,6 +143,53 @@ All notable changes to this package are documented here. The format follows
 
 ### Fixed
 
+- A master that could not be reached was reported by `iolink read`, `write`
+  and `param` as `IOLINK_NO_DEVICE`, "port 1 reports no IO-Link device": the
+  adapters answer an outage with an entry carrying `error`, and the identity
+  lookup read the missing ids as an empty port. Worse, that answer went into
+  the identity cache, so the outage lived on for a full re-check after the
+  master was back. It is now `IOLINK_MASTER_UNREACHABLE`, names the cause,
+  and is never cached.
+- `iolink event` reported a master going quiet as every device on the rack
+  disappearing, and the master returning as every device appearing again,
+  because an unanswered port looked exactly like an empty one. The last known
+  state is now carried through the outage under `payload.unreachable`, with
+  `event.direction` `unreachable` and `reachable`; a device that really did
+  leave while the master was down is still reported as gone when it returns.
+- Opening `iolink read`, changing nothing but the name and pressing Done
+  emptied the value selection. The dialog shows the saved selection as a
+  ticked list until a scan replaces it, and "everything ticked" was taken as
+  "no filter" whether the list came from the device or not. It now means that
+  only after a scan.
+- `msg.parameter` on `iolink param` was documented as overriding the dialog
+  but only did so when the dialog was empty or set to take it from the message;
+  a name typed into the dialog was evaluated first and the message ignored.
+  The message now wins, as the help says.
+- `iolink read` in split mode dropped `msg.errors`: the ports that did not
+  answer were counted in the status line but named nowhere. They are now
+  named on every split message.
+- The HTTP timeout was lifted as soon as a master's headers arrived, so a
+  master that sent headers and then stalled on the body hung the flow. The
+  body is now read under the same timeout.
+
+- The edit dialogs of `iolink read` and `iolink param` left a `form-row`
+  unclosed, so the browser nested the rule, the identity fields and the tips
+  that followed inside the **Poll** (respectively **Subindex**) row: one field
+  387 pixels tall where every other is 34. Both dialogs also carried two
+  paragraphs of help text at the bottom, which belongs in the help pane and is
+  where `iolink write` already had it.
+- The palette section was headed **IO**. The category was `IO-Link`, and the
+  editor takes everything before the first `-` as the section it files a node
+  under (`category.split("-")[0]`), so the rest of the name was silently
+  dropped. It is now `IO Link Suite`, which the editor shows in full.
+- The node icons were never displayed. Node-RED's registry looks for icons at
+  `<module>/<the directory the node's .js is in>/icons`, and they were shipped
+  in an `icons/` at the root of the package, so the registry listed the suite
+  with no icons at all and every node quietly wore Node-RED's fallback arrow.
+  Nothing said so: an unknown icon URL answers 200 with the fallback, which is
+  why the integration test asking for the icons passed throughout. They now
+  live in `nodes/icons`, and the test checks the registry's listing rather
+  than the status code. (Introduced with the icons, above, and never released.)
 - **Test connection** on a generic HTTP/JSON master reported success without
   sending anything, because that profile's `identify()` answered from its own
   configuration. It now probes a port, so a wrong host fails the test instead

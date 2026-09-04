@@ -111,3 +111,17 @@ test('a user without a password still produces a valid header', async () => {
     assert.equal(auth, 'Basic ' + Buffer.from('admin:').toString('base64'))
   } finally { await s.close() }
 })
+
+test('a master that sends its headers and then stalls still hits the timeout', async () => {
+  // Headers arrive at once, the body never does. The abort used to be cleared
+  // as soon as the headers were in, which left the flow waiting for ever.
+  const s = await serve((_req, res) => {
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.write('{"code": 200, "data": ')
+  })
+  try {
+    const e = await requestJson(s.url, { timeout: 120 }).catch(e => e)
+    assert.ok(e instanceof MasterError)
+    assert.match(e.message, /no reply from .* within 120 ms/)
+  } finally { await s.close() }
+})

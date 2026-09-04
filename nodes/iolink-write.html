@@ -1,6 +1,6 @@
 <script type="text/javascript">
   RED.nodes.registerType('iolink-write', {
-    category: 'IO-Link',
+    category: 'IO Link Suite',
     color: '#c0deed',
     defaults: {
       name: { value: '' },
@@ -17,7 +17,7 @@
     },
     inputs: 1,
     outputs: 1,
-    icon: 'iolink-write.svg',
+    icon: 'iolink.svg',
     label: function () { return this.name || ('write port ' + (this.port || '?')) },
     oneditprepare: function () {
       $('#node-input-port').typedInput({

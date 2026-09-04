@@ -78,7 +78,7 @@ test('a write reports the device it went to, as a read does', async () => {
   try {
     const [msg] = await node.receive({ payload: 30 })
     assert.deepEqual(msg.device, {
-      vendor: 'Test Instruments GmbH', product: 'DEMO-100', port: 1
+      vendor: 'Test Instruments GmbH', vendorId: 999, deviceId: 4242, product: 'DEMO-100', serial: 'TI-0001', port: 1
     })
     assert.match(msg.timestamp, /^\d{4}-\d{2}-\d{2}T/)
   } finally { await close() }
@@ -142,5 +142,119 @@ test('an index the device rejects surfaces the master\'s code', async () => {
     delete master.state.ports[1].isdu['102/0']
     const err = await node.receiveExpectingError({})
     assert.match(err.message, /code 801/)
+  } finally { await close() }
+})
+
+/** Several parameters in one node. */
+
+test('reads several parameters into one message, keyed by name', async () => {
+  const { node, close } = await setup({ parameter: 'Switch point, Output polarity' })
+  try {
+    const [msg] = await node.receive({})
+    assert.deepEqual(msg.payload, { 'Switch point': 23.47, 'Output polarity': 1 })
+    assert.equal(msg.meta['Switch point'].unit, '°C')
+    assert.equal(msg.meta['Output polarity'].text, 'Normally closed')
+    assert.equal(msg.iolink['Switch point'].index, 100)
+    // The device is the same for all of them, so it stays where it was.
+    assert.equal(msg.device.vendor, 'Test Instruments GmbH')
+    assert.equal(msg.errors, undefined)
+    assert.match(node.lastStatus.text, /read 2 parameters/)
+  } finally { await close() }
+})
+
+test('asking by index still keys the message by name', async () => {
+  const { node, close } = await setup({ parameter: '100,101' })
+  try {
+    const [msg] = await node.receive({})
+    // Asking by index and asking by name must produce the same message.
+    assert.deepEqual(Object.keys(msg.payload), ['Switch point', 'Output polarity'])
+  } finally { await close() }
+})
+
+test('a single parameter keeps the flat message it always had', async () => {
+  const { node, close } = await setup({ parameter: 'Switch point' })
+  try {
+    const [msg] = await node.receive({})
+    assert.equal(msg.payload, 23.47)
+    assert.equal(msg.meta.unit, '°C')
+  } finally { await close() }
+})
+
+test('keeps the parameters that answered when one does not exist', async () => {
+  const { node, close } = await setup({ parameter: 'Switch point, No Such Thing' })
+  try {
+    const [msg] = await node.receive({})
+    assert.deepEqual(Object.keys(msg.payload), ['Switch point'])
+    assert.match(msg.errors['No Such Thing'], /IOLINK_UNKNOWN_PARAMETER/)
+    assert.match(node.lastStatus.text, /read 1 of 2/)
+  } finally { await close() }
+})
+
+test('fails when not one of the parameters asked for answers', async () => {
+  const { node, close } = await setup({ parameter: 'No Such Thing, Nor This' })
+  try {
+    const err = await node.receiveExpectingError({})
+    assert.match(err.message, /IOLINK_NO_PARAMETER: no parameter answered/)
+  } finally { await close() }
+})
+
+test('takes a list of parameters from the message', async () => {
+  const { node, close } = await setup({ parameter: 'parameter', parameterType: 'msg' })
+  try {
+    const [msg] = await node.receive({ parameter: ['Switch point', 'Output polarity'] })
+    assert.deepEqual(Object.keys(msg.payload), ['Switch point', 'Output polarity'])
+  } finally { await close() }
+})
+
+test('writing several parameters takes an object keyed by parameter', async () => {
+  const { node, close } = await setup(
+    { action: 'write', parameter: 'Switch point, Output polarity' })
+  try {
+    const [msg] = await node.receive({ payload: { 'Switch point': 30, 'Output polarity': 0 } })
+    assert.deepEqual(msg.payload, { 'Switch point': 30, 'Output polarity': 0 })
+    assert.equal(msg.meta, undefined)
+    assert.match(node.lastStatus.text, /wrote 2 parameters/)
+  } finally { await close() }
+})
+
+test('writing several parameters refuses a payload that is not keyed', async () => {
+  const { node, close } = await setup(
+    { action: 'write', parameter: 'Switch point, Output polarity' })
+  try {
+    // 30 cannot be meant for both. Writing it to the first and guessing for the
+    // second is how a machine ends up half configured.
+    const err = await node.receiveExpectingError({ payload: 30 })
+    assert.match(err.message, /IOLINK_NO_PARAMETER: no parameter answered/)
+    assert.match(err.message, /object payload keyed by parameter/)
+  } finally { await close() }
+})
+
+test('msg.parameter overrides the parameter set in the dialog', async () => {
+  // The help has always said so; with a name typed into the dialog the
+  // message used to be ignored, since the dialog was evaluated first.
+  const { node, close } = await setup({ parameter: 'Switch point' })
+  try {
+    const [msg] = await node.receive({ parameter: 'Output polarity' })
+    assert.equal(msg.iolink.index, 101)
+  } finally { await close() }
+})
+
+test('a subindex that is not a small whole number is refused before the device is asked', async () => {
+  const { node, master, close } = await setup({ parameter: 'Switch point' })
+  try {
+    for (const bad of ['abc', -1, 1.5, 256]) {
+      const err = await node.receiveExpectingError({ subindex: bad })
+      assert.match(err.message, /^IOLINK_BAD_SUBINDEX: .* is not a subindex \(0 to 255\)/)
+    }
+    assert.equal(master.requests.filter(r => /iolreadacyclic/.test(r.adr)).length, 0)
+  } finally { await close() }
+})
+
+test('a master answering something that is not hex is refused rather than decoded as nothing', async () => {
+  const { node, master, close } = await setup({ parameter: 'Switch point' })
+  try {
+    master.state.ports[1].isdu['100/0'] = 'ERR'
+    const err = await node.receiveExpectingError({})
+    assert.match(err.message, /^IOLINK_BAD_HEX: the value the master returned for "Switch point" is not hex: "err"/)
   } finally { await close() }
 })

@@ -15,17 +15,19 @@ async function withMaster (fn) {
   }
 }
 
-test('the registry lists the profiles and says which are verified', () => {
+test('the registry lists the profiles and says what each rests on', () => {
   const profiles = listProfiles()
-  const ifm = profiles.find(p => p.id === 'ifm')
-  assert.equal(ifm.verified, true)
-  assert.equal(profiles.find(p => p.id === 'generic').verified, false)
+  assert.deepEqual(profiles.map(p => p.id), ['ifm', 'jsonapi', 'generic'])
+  // None has been checked against a master yet, and the registry must not
+  // claim otherwise: the dialog repeats what it says here.
+  assert.ok(profiles.every(p => p.verified === false))
+  assert.match(profiles.find(p => p.id === 'ifm').basis, /documentation/)
 })
 
 test('an unknown profile names the ones that exist', () => {
   assert.throws(() => createAdapter('siemens', {}), err => {
     assert.ok(err instanceof MasterError)
-    assert.match(err.message, /unknown master profile "siemens"; available: ifm, generic/)
+    assert.match(err.message, /unknown master profile "siemens"; available: ifm, jsonapi, generic/)
     return true
   })
 })
@@ -126,9 +128,12 @@ test('one port failing does not abort the scan of the others', async () => {
   const master = await new FakeMaster().listen()
   try {
     const adapter = createAdapter('ifm', { url: master.url })
-    // Port 9 does not exist on this master and answers with code 400.
+    // Port 9 does not exist on this master and answers with code 400. The
+    // master answered, so that is the port's state, not an outage.
     const ports = await adapter.scanPorts([9, 1])
-    assert.match(ports[0].error, /port 9 does not exist/)
+    assert.equal(ports[0].connected, false)
+    assert.match(ports[0].statusText, /port 9 does not exist/)
+    assert.equal(ports[0].error, undefined)
     assert.equal(ports[1].vendorId, 999)
   } finally { await master.close() }
 })

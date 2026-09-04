@@ -304,7 +304,7 @@
         "type": "function",
         "z": "tab-integration",
         "name": "message -> body",
-        "func": "return {\n    res: msg.res,\n    req: msg.req,\n    payload: {\n        topic: msg.topic,\n        payload: msg.payload,\n        meta: msg.meta,\n        device: msg.device,\n        iolink: msg.iolink,\n        timestamp: msg.timestamp\n    }\n};",
+        "func": "return {\n    res: msg.res,\n    req: msg.req,\n    payload: {\n        topic: msg.topic,\n        payload: msg.payload,\n        meta: msg.meta,\n        device: msg.device,\n        iolink: msg.iolink,\n        errors: msg.errors,\n        timestamp: msg.timestamp\n    }\n};",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",
@@ -362,5 +362,88 @@
         "x": 830,
         "y": 260,
         "wires": []
+    },
+    {
+        "id": "in-read-many",
+        "type": "http in",
+        "z": "tab-integration",
+        "name": "",
+        "url": "/read-many",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 130,
+        "y": 510,
+        "wires": [
+            [
+                "node-read-many"
+            ]
+        ]
+    },
+    {
+        "id": "node-read-many",
+        "type": "iolink-read",
+        "z": "tab-integration",
+        "name": "",
+        "master": "cfg-master",
+        "port": "1,2",
+        "portType": "str",
+        "values": [],
+        "variant": "",
+        "conditions": "",
+        "enums": "value",
+        "output": "single",
+        "topicPrefix": "",
+        "interval": 0,
+        "identityTtl": 30000,
+        "vendorId": "",
+        "deviceId": "",
+        "x": 340,
+        "y": 510,
+        "wires": [
+            [
+                "fn-envelope"
+            ]
+        ]
+    },
+    {
+        "id": "in-param-many",
+        "type": "http in",
+        "z": "tab-integration",
+        "name": "",
+        "url": "/param-many",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 130,
+        "y": 560,
+        "wires": [
+            [
+                "node-param-many"
+            ]
+        ]
+    },
+    {
+        "id": "node-param-many",
+        "type": "iolink-param",
+        "z": "tab-integration",
+        "name": "",
+        "master": "cfg-master",
+        "port": "1",
+        "portType": "num",
+        "action": "read",
+        "parameter": "Switch point, Output polarity",
+        "parameterType": "str",
+        "subindex": "",
+        "identityTtl": 30000,
+        "vendorId": "",
+        "deviceId": "",
+        "x": 340,
+        "y": 560,
+        "wires": [
+            [
+                "fn-envelope"
+            ]
+        ]
     }
 ]

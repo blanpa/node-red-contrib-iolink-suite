@@ -1,7 +1,7 @@
 <script type="text/javascript">
   RED.nodes.registerType('iodd-decode', {
-    category: 'IO-Link',
-    color: '#a6d5b0',
+    category: 'IO Link Suite',
+    color: '#c0deed',
     defaults: {
       name: { value: '' },
       iodd: { value: '' },
@@ -16,7 +16,7 @@
     },
     inputs: 1,
     outputs: 1,
-    icon: 'iodd-decode.svg',
+    icon: 'iolink.svg',
     label: function () {
       return this.name || (this.mode === 'encode' ? 'encode IODD' : 'decode IODD')
     },
@@ -87,10 +87,9 @@
     <input type="text" id="node-input-conditions" placeholder='{"V_Unit": 1}'>
   </div>
   <div class="form-row" id="iolink-row-strict">
-    <label for="node-input-strictLength" style="width:auto">
-      <input type="checkbox" id="node-input-strictLength" style="width:auto;vertical-align:top">
-      Reject data longer than the layout
-    </label>
+    <label for="node-input-strictLength"><i class="fa fa-text-width"></i> Length</label>
+    <input type="checkbox" id="node-input-strictLength" style="width:auto">
+    <span>Reject data longer than the layout</span>
   </div>
   <div class="form-tips">
     Conditions resolve devices whose layout or whose scaling depends on a

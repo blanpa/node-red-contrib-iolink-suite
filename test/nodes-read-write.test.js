@@ -2,7 +2,7 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const { createAdapter } = require('../lib/adapters')
-const { FakeMaster } = require('./fake-master')
+const { FakeMaster, DEFAULT_STATE } = require('./fake-master')
 const { loadNodes, withMaster, waitFor } = require('./helpers')
 
 /**
@@ -252,5 +252,214 @@ test('iolink-write takes editor values as defaults the message overrides', async
     await node.receive({ payload: { Intensity: 3 } })
     assert.equal(master.state.ports[1].pdout, '07') // Valve from the editor, 3 from the message
     await node.close()
+  } finally { await close() }
+})
+
+/**
+ * Reading several ports at once.
+ *
+ * The default rack has one device, so these build their own: two DEMO-100s
+ * carrying different process data, which is the case the feature exists for -
+ * a line of identical sensors read in one go.
+ */
+async function setupRack (files) {
+  const state = DEFAULT_STATE()
+  state.ports[2] = { ...state.ports[1], serial: 'TI-0002', pdin: '0BB80531' }
+  const master = await new FakeMaster(state).listen()
+  const RED = loadNodes(...files)
+  withMaster(RED, createAdapter('ifm', { url: master.url, timeout: 2000 }))
+  return { RED, master, close: () => master.close() }
+}
+
+test('iolink-read reads several ports into one message, keyed by port', async () => {
+  const { RED, close } = await setupRack(['iolink-read.js'])
+  try {
+    const node = RED.create('iolink-read',
+      { master: 'master-1', port: '1,2', portType: 'str' })
+    const [msg] = await node.receive({})
+
+    assert.deepEqual(Object.keys(msg.payload), ['1', '2'])
+    assert.equal(msg.payload[1].Temperature, 23.47)
+    // A different pdin on port 2: the ports are decoded separately, not once.
+    assert.notEqual(msg.payload[2].Temperature, msg.payload[1].Temperature)
+    // Every part of the single-port message keeps its name under the port key.
+    assert.equal(msg.meta[1].Temperature.unit, '°C')
+    assert.equal(msg.device[2].serial, 'TI-0002')
+    assert.equal(msg.device[2].port, 2)
+    assert.equal(msg.iolink[2].raw, '0bb80531')
+    assert.equal(msg.errors, undefined)
+    assert.match(node.lastStatus.text, /2 ports: 8 values/)
+    await node.close()
+  } finally { await close() }
+})
+
+test('iolink-read still emits the flat message for a single port', async () => {
+  const { RED, close } = await setupRack(['iolink-read.js'])
+  try {
+    // The list form with one port in it must not change the shape: a flow that
+    // reads one port cannot be made to break by this feature existing.
+    const node = RED.create('iolink-read',
+      { master: 'master-1', port: '1', portType: 'str' })
+    const [msg] = await node.receive({})
+    assert.equal(msg.payload.Temperature, 23.47)
+    assert.equal(msg.device.port, 1)
+    await node.close()
+  } finally { await close() }
+})
+
+test('iolink-read keeps the ports that answered when one does not', async () => {
+  const { RED, close } = await setupRack(['iolink-read.js'])
+  try {
+    // Port 3 is a digital input, not IO-Link. An empty socket in the middle of
+    // a rack is a normal state of a plant, and must not cost the other ports
+    // their reading.
+    const node = RED.create('iolink-read',
+      { master: 'master-1', port: '1,3', portType: 'str' })
+    const [msg] = await node.receive({})
+    assert.deepEqual(Object.keys(msg.payload), ['1'])
+    assert.match(msg.errors[3], /IOLINK_NO_DEVICE/)
+    assert.match(node.lastStatus.text, /1 of 2 ports/)
+    await node.close()
+  } finally { await close() }
+})
+
+test('iolink-read fails when no port in the list answers', async () => {
+  const { RED, close } = await setupRack(['iolink-read.js'])
+  try {
+    const node = RED.create('iolink-read',
+      { master: 'master-1', port: '3,4', portType: 'str' })
+    const err = await node.receiveExpectingError({})
+    assert.match(err.message, /IOLINK_NO_DATA: no port answered/)
+    await node.close()
+  } finally { await close() }
+})
+
+test('iolink-read puts the port in the topic when splitting several ports', async () => {
+  const { RED, close } = await setupRack(['iolink-read.js'])
+  try {
+    // Two devices of one type carry the same value names, so a shared prefix
+    // would publish both ports' Temperature to one topic.
+    const node = RED.create('iolink-read', {
+      master: 'master-1', port: '1,2', portType: 'str', output: 'split', topicPrefix: 'plant'
+    })
+    const [sent] = await node.receive({})
+    const topics = sent[0].map(m => m.topic)
+    assert.equal(sent[0].length, 8)
+    assert.ok(topics.includes('plant/port1/Temperature'), topics.join(', '))
+    assert.ok(topics.includes('plant/port2/Temperature'), topics.join(', '))
+    await node.close()
+  } finally { await close() }
+})
+
+test('iolink-read reads a port named twice only once', async () => {
+  const { RED, close } = await setupRack(['iolink-read.js'])
+  try {
+    const node = RED.create('iolink-read',
+      { master: 'master-1', port: '1,1', portType: 'str' })
+    const [msg] = await node.receive({})
+    // One port after de-duplication, so the flat shape - not a key "1" twice.
+    assert.equal(msg.payload.Temperature, 23.47)
+    await node.close()
+  } finally { await close() }
+})
+
+test('iolink-read takes a list of ports from the message', async () => {
+  const { RED, close } = await setupRack(['iolink-read.js'])
+  try {
+    const node = RED.create('iolink-read',
+      { master: 'master-1', port: 'ports', portType: 'msg' })
+    const [msg] = await node.receive({ ports: [1, 2] })
+    assert.deepEqual(Object.keys(msg.payload), ['1', '2'])
+    await node.close()
+  } finally { await close() }
+})
+
+test('iolink-read tells an unreachable master from an empty port', async () => {
+  const { RED, master, close } = await setup(['iolink-read.js'])
+  try {
+    const adapter = RED.nodes.getNode('master-1').adapter
+    const node = RED.create('iolink-read', { master: 'master-1', port: 1, portType: 'num' })
+    await master.close()
+
+    const err = await node.receiveExpectingError({})
+    assert.match(err.message, /^IOLINK_MASTER_UNREACHABLE: port 1 could not be asked/)
+    assert.match(node.lastStatus.text, /could not be asked/)
+
+    // Back on the air: the next read must work at once, not after the re-check
+    // has expired. The fake master cannot come back on the same port, so the
+    // adapter is pointed at a fresh one.
+    const again = await new FakeMaster().listen()
+    try {
+      adapter.baseUrl = again.url
+      const [msg] = await node.receive({})
+      assert.equal(msg.payload.Temperature, 23.47)
+    } finally { await again.close() }
+    await node.close()
+  } finally { await close().catch(() => {}) }
+})
+
+test('iolink-read names the ports that failed on every split message', async () => {
+  const { RED, close } = await setupRack(['iolink-read.js'])
+  try {
+    const node = RED.create('iolink-read',
+      { master: 'master-1', port: '1,3', portType: 'str', output: 'split' })
+    const [sent] = await node.receive({})
+    const msgs = sent[0]
+    assert.equal(msgs.length, 4)
+    assert.ok(msgs.every(m => /IOLINK_NO_DEVICE/.test(m.errors[3])),
+      'a message per value has nowhere else to carry the failed ports')
+    await node.close()
+  } finally { await close() }
+})
+
+test('iolink-read warns once about a selected value the device does not carry', async () => {
+  const { RED, close } = await setup(['iolink-read.js'])
+  try {
+    const node = RED.create('iolink-read', {
+      master: 'master-1', port: 1, portType: 'num', values: ['Temperature', 'Humidity']
+    })
+    const [msg] = await node.receive({})
+    await node.receive({})
+    assert.deepEqual(Object.keys(msg.payload), ['Temperature'])
+    assert.equal(node.warnings.length, 1, 'once, not on every poll')
+    assert.match(node.warnings[0], /port 1: the selected value Humidity is not in this device's process data/)
+    assert.match(node.warnings[0], /it has: Temperature, Counter/)
+    await node.close()
+  } finally { await close() }
+})
+
+test('iolink-write reports the device the same way iolink-read does', async () => {
+  const { RED, close } = await setup(['iolink-write.js'])
+  try {
+    const node = RED.create('iolink-write', { master: 'master-1', port: 1, portType: 'num' })
+    const [msg] = await node.receive({ payload: { Valve: true } })
+    assert.deepEqual(msg.device, {
+      vendor: 'Test Instruments GmbH',
+      vendorId: 999,
+      deviceId: 4242,
+      product: 'DEMO-100',
+      serial: 'TI-0001',
+      port: 1
+    })
+    await node.close()
+  } finally { await close() }
+})
+
+test('nodes on one master share one identity cache', async () => {
+  const { RED, master, close } = await setup(['iolink-read.js', 'iolink-write.js'])
+  try {
+    const adapter = RED.nodes.getNode('master-1').adapter
+    let scans = 0
+    const scanPorts = adapter.scanPorts.bind(adapter)
+    adapter.scanPorts = async (...args) => { scans++; return scanPorts(...args) }
+
+    const read = RED.create('iolink-read', { master: 'master-1', port: 1, portType: 'num' })
+    const write = RED.create('iolink-write', { master: 'master-1', port: 1, portType: 'num' })
+    await read.receive({})
+    await write.receive({ payload: { Valve: true } })
+    assert.equal(scans, 1, 'the second node on the port must be served from the first one\'s scan')
+    assert.ok(master, 'the fake master is still up')
+    await read.close()
+    await write.close()
   } finally { await close() }
 })

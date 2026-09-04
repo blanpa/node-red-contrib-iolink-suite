@@ -6,3 +6,7 @@ coverage/
 # Real vendor IODDs pulled from IODDfinder for tests. Vendor-copyrighted,
 # so they are fetched on demand (npm run corpus) and never committed.
 test/corpus/
+
+# Raw exchanges with real masters, made by npm run record. Attach to an
+# issue or promote to a fixture deliberately; not committed by default.
+recordings/

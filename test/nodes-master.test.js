@@ -75,7 +75,8 @@ test('the profile list is served to the editor', async () => {
   try {
     const { status, body } = await RED.callRoute('GET', '/iolink-suite/profiles')
     assert.equal(status, 200)
-    assert.deepEqual(body.map(p => p.id), ['ifm', 'generic'])
+    assert.deepEqual(body.map(p => p.id), ['ifm', 'jsonapi', 'generic'])
+    assert.ok(body.every(p => typeof p.basis === 'string' && p.basis.length))
   } finally { await close() }
 })
 
@@ -162,5 +163,18 @@ test('the parameter picker lists the ISDU parameters with access rights', async 
       { name: 'Switch point', access: 'rw', unit: '°C', type: 'Integer' })
     // Standard parameters are marked, so the editor can group them apart.
     assert.equal(body.parameters.find(p => p.index === 16).standard, true)
+  } finally { await close() }
+})
+
+test('the pickers refuse a port that is not a number instead of asking the master about it', async () => {
+  const { RED, close } = await setup()
+  try {
+    // With the port taken from a message, the dialog's field holds a property
+    // name; the picker used to send it and blame the master for the answer.
+    for (const route of ['/iolink-suite/datapoints/:id/:port', '/iolink-suite/parameters/:id/:port']) {
+      const { status, body } = await RED.callRoute('GET', route, { id: 'master-1', port: 'payload.port' })
+      assert.equal(status, 400)
+      assert.match(body.error, /"payload.port" is not a port number/)
+    }
   } finally { await close() }
 })

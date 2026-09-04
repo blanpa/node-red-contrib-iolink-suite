@@ -17,7 +17,8 @@
       ioddCacheDir: { value: '' },
       offline: { value: false },
       paths: { value: '' },
-      valuePath: { value: '' }
+      valuePath: { value: '' },
+      masterNumber: { value: 1 }
     },
     credentials: {
       user: { type: 'text' },
@@ -31,12 +32,21 @@
       $.getJSON('iolink-suite/profiles', function (profiles) {
         const select = $('#node-config-input-profile').empty()
         profiles.forEach(function (p) {
-          select.append($('<option>').val(p.id).text(p.label + (p.verified ? '' : ' — unverified')))
+          select.append($('<option>').val(p.id).text(p.label).data('profile', p))
         })
         select.val(node.profile || 'ifm').trigger('change')
       })
       $('#node-config-input-profile').on('change', function () {
-        $('.iolink-generic-only').toggle($(this).val() === 'generic')
+        const id = $(this).val()
+        $('.iolink-generic-only').toggle(id === 'generic')
+        $('.iolink-jsonapi-only').toggle(id === 'jsonapi')
+        // What the profile rests on, said where the choice is made: none has
+        // been checked against a master yet, and a dialog that implied
+        // otherwise would be believed.
+        const p = $(this).find('option:selected').data('profile')
+        $('#iolink-profile-basis').text(p
+          ? 'Built from ' + p.basis + (p.verified ? ', verified against a master.' : '; not yet verified against a master.')
+          : '')
       })
       $('#iolink-test').on('click', function () {
         const status = $('#iolink-test-result').text('testing…').css('color', '')
@@ -65,9 +75,16 @@
     <label for="node-config-input-name"><i class="fa fa-tag"></i> Name</label>
     <input type="text" id="node-config-input-name" placeholder="Line 3 master">
   </div>
+
+  <hr>
+  <h4 style="margin:0 0 10px">Connection</h4>
   <div class="form-row">
     <label for="node-config-input-profile"><i class="fa fa-plug"></i> Profile</label>
     <select id="node-config-input-profile"></select>
+  </div>
+  <div class="form-row" style="margin-top:-6px">
+    <label>&nbsp;</label>
+    <span id="iolink-profile-basis" style="color:#888"></span>
   </div>
   <div class="form-row">
     <label for="node-config-input-host"><i class="fa fa-globe"></i> Host</label>
@@ -104,6 +121,7 @@
   </div>
 
   <hr>
+  <h4 style="margin:0 0 10px">IODD</h4>
   <div class="form-row">
     <label for="node-config-input-language"><i class="fa fa-language"></i> Language</label>
     <input type="text" id="node-config-input-language" placeholder="en" style="width:80px">
@@ -138,8 +156,19 @@
     <span style="color:#888">before looking again for an IODD that was not found</span>
   </div>
 
+  <div class="iolink-jsonapi-only" style="display:none">
+    <hr>
+    <h4 style="margin:0 0 10px">JSON API</h4>
+    <div class="form-row">
+      <label for="node-config-input-masterNumber"><i class="fa fa-hashtag"></i> Master no.</label>
+      <input type="text" id="node-config-input-masterNumber" style="width:100px" placeholder="1">
+      <span style="color:#888">a gateway with several masters numbers them from 1</span>
+    </div>
+  </div>
+
   <div class="iolink-generic-only" style="display:none">
     <hr>
+    <h4 style="margin:0 0 10px">Generic profile</h4>
     <div class="form-row">
       <label for="node-config-input-paths"><i class="fa fa-code"></i> Paths</label>
       <input type="text" id="node-config-input-paths"
@@ -165,12 +194,22 @@
      refers to a master node, and they share its IODD cache.</p>
 
   <h3>Profiles</h3>
+  <p>Every profile was built from its interface's documentation and tested
+     against a stand-in that speaks it; none has yet been checked against a
+     master on a bench. <code>scripts/record-master.js</code> captures what a
+     real master answers, so a difference can be seen and fixed.</p>
   <dl class="message-properties">
     <dt>ifm IoT Core</dt>
-    <dd>ifm AL13xx / AL19xx / AL2xxx. Verified against the documented JSON API.</dd>
+    <dd>ifm AL13xx / AL19xx / AL2xxx, after ifm's IoT Core documentation: one
+        POST endpoint, the address in the body.</dd>
+    <dt>IO-Link JSON API</dt>
+    <dd>The IO-Link Community's "JSON Integration for IO-Link" REST interface,
+        which several vendors share — Balluff and Pepperl+Fuchs among them.
+        Everything sits under <code>/iolink/v1</code>; a gateway that holds
+        several masters numbers them, so say which. Ports renamed in the
+        master's configuration are found by their alias.</dd>
     <dt>Generic HTTP/JSON</dt>
-    <dd>For masters with a REST API of the same shape but different paths —
-        Balluff, Turck and others. Configure the path templates
+    <dd>For a master with a REST API of its own shape. Configure the path templates
         (<code>{port}</code>, <code>{index}</code>, <code>{subindex}</code>,
         <code>{value}</code>) and which field of the reply carries the value.
         A working configuration is worth contributing back as a preset.

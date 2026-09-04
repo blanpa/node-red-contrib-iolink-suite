@@ -158,7 +158,11 @@ test('the example flows are valid and only use nodes that exist', () => {
 test('every node icon exists, and every icon is used', () => {
   // Node-RED silently falls back to a default icon for a missing file, so a
   // typo here shows up as "why does that node look wrong" and nothing else.
-  const dir = path.join(root, 'icons')
+  // The directory has to sit next to the node files: the registry looks for
+  // icons at <module>/<dirname of the node's file>/icons, so an icons/ at the
+  // root of the package is never found and every node quietly wears the
+  // fallback arrow.
+  const dir = path.join(root, 'nodes', 'icons')
   const shipped = fs.readdirSync(dir)
   const used = new Set()
 
@@ -174,22 +178,57 @@ test('every node icon exists, and every icon is used', () => {
   for (const icon of shipped) {
     assert.ok(used.has(icon), `icons/${icon} is shipped but no node uses it`)
   }
-  assert.ok(pkg.files.includes('icons/'), 'package.json "files" must include icons/')
+  // nodes/ carries the icons along with the node files themselves.
+  assert.ok(pkg.files.includes('nodes/'), 'package.json "files" must include nodes/')
+  for (const [, file] of declared) {
+    assert.equal(path.dirname(file), 'nodes',
+      `${file} sits outside nodes/, where the icons the registry finds are`)
+  }
 })
 
-test('the icons are what Node-RED asks for: white, transparent, 2:3', () => {
-  for (const name of fs.readdirSync(path.join(root, 'icons'))) {
-    const svg = fs.readFileSync(path.join(root, 'icons', name), 'utf8')
+test('the icons are what Node-RED asks for: black, transparent, 2:3', () => {
+  for (const name of fs.readdirSync(path.join(root, 'nodes', 'icons'))) {
+    const svg = fs.readFileSync(path.join(root, 'nodes', 'icons', name), 'utf8')
     const box = svg.match(/viewBox="0 0 (\d+) (\d+)"/)
     assert.ok(box, `${name} needs a viewBox`)
     assert.equal(Number(box[2]) / Number(box[1]), 1.5, `${name} must keep the 2:3 aspect ratio`)
     assert.ok(Number(box[1]) >= 40, `${name} should be at least 40 x 60`)
-    // Anything but white would be invisible on some node colours, and the
-    // editor does not recolour a custom icon.
+    // The editor does not recolour a custom icon, so an icon is only ever
+    // legible against the node colours it is put on. Every node in the suite
+    // carries the one light colour, so the mark is black; on a dark node it
+    // would have to be white instead.
     for (const colour of svg.matchAll(/(?:fill|stroke)="([^"]+)"/g)) {
-      assert.ok(['#fff', 'none'].includes(colour[1]),
-        `${name} paints with ${colour[1]}; node icons are white on transparent`)
+      assert.ok(['#000', 'none'].includes(colour[1]),
+        `${name} paints with ${colour[1]}; node icons are black on transparent`)
     }
     assert.doesNotMatch(svg, /<image|<text/, `${name} should be shapes, not bitmaps or fonts`)
+  }
+})
+
+/**
+ * An unclosed tag in an edit dialog does not fail to render. The browser simply
+ * nests everything that follows inside the row that was left open, so the
+ * dialog grows one field several hundred pixels tall and the sections below it
+ * quietly become part of it. Both `iolink read` and `iolink param` shipped that
+ * way, and nothing - not the unit suite, not the editor linter, not the
+ * integration test - had anything to say about it.
+ */
+test('the editor templates close every tag they open', () => {
+  const mustClose = ['div', 'select', 'label', 'dl', 'ul', 'p']
+  for (const name of fs.readdirSync(path.join(root, 'nodes')).filter(f => f.endsWith('.html'))) {
+    const html = fs.readFileSync(path.join(root, 'nodes', name), 'utf8')
+    const blocks = html.matchAll(
+      /<script type="text\/html"[^>]*data-(?:template|help)-name="([^"]+)"[^>]*>([\s\S]*?)<\/script>/g)
+    let found = 0
+    for (const [, which, body] of blocks) {
+      found++
+      for (const tag of mustClose) {
+        const open = (body.match(new RegExp(`<${tag}[\\s>]`, 'g')) || []).length
+        const close = (body.match(new RegExp(`</${tag}>`, 'g')) || []).length
+        assert.equal(open, close,
+          `${name}: the "${which}" block opens ${open} <${tag}> and closes ${close}`)
+      }
+    }
+    assert.ok(found >= 2, `${name} should hold an edit template and a help block`)
   }
 })

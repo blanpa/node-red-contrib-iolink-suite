@@ -1,7 +1,7 @@
 'use strict'
 const { createAdapter, listProfiles } = require('../lib/adapters')
 const { IoddStore } = require('../lib/iodd-store')
-const { parsePorts, safeJson } = require('../lib/runtime')
+const { parsePorts, safeJson, PortIdentityCache } = require('../lib/runtime')
 
 module.exports = function (RED) {
   /**
@@ -30,7 +30,8 @@ module.exports = function (RED) {
       user: credentials.user || undefined,
       password: credentials.password || undefined,
       paths: safeJson(config.paths),
-      valuePath: config.valuePath || undefined
+      valuePath: config.valuePath || undefined,
+      masterNumber: Number(config.masterNumber) || 1
     }
 
     node.adapter = createAdapter(node.profile, node.settings)
@@ -43,6 +44,13 @@ module.exports = function (RED) {
       retryAfter: Number(config.ioddRetryAfter) || undefined
     })
 
+    /**
+     * Which device is on which port, shared by every node on this master, so
+     * three nodes on port 1 ask it once rather than three times. Each node
+     * says how old an answer it will accept.
+     */
+    node.identity = new PortIdentityCache()
+
     /** Parse options every node under this master shares. */
     node.parseOptions = () => ({
       language: config.language || 'en',
@@ -51,6 +59,7 @@ module.exports = function (RED) {
 
     node.on('close', function (done) {
       node.iodd.clear()
+      node.identity.clear()
       done()
     })
   }
@@ -88,8 +97,25 @@ module.exports = function (RED) {
     try {
       res.json(await handler(node, req))
     } catch (e) {
-      res.status(500).json({ error: e.message, code: e.code })
+      res.status(e.status || 500).json({ error: e.message, code: e.code })
     }
+  }
+
+  /**
+   * The port an editor request is about.
+   *
+   * The dialogs send whatever their port field holds, and with the field set
+   * to take the port from a message that is a property name, not a number.
+   * Asking the master about port NaN gets an answer that blames the master.
+   */
+  const portParam = req => {
+    const port = Number(req.params.port)
+    if (!Number.isInteger(port) || port < 1) {
+      throw Object.assign(
+        new Error(`"${req.params.port}" is not a port number; type the port to scan it`),
+        { code: 'IOLINK_BAD_PORT', status: 400 })
+    }
+    return port
   }
 
   RED.httpAdmin.get('/iolink-suite/profiles',
@@ -139,9 +165,10 @@ module.exports = function (RED) {
   RED.httpAdmin.get('/iolink-suite/datapoints/:id/:port',
     RED.auth.needsPermission('flows.write'),
     withMaster(async (node, req) => {
-      const port = Number(req.params.port)
+      const port = portParam(req)
       const direction = req.query.direction === 'out' ? 'out' : 'in'
       const [status] = await node.adapter.scanPorts([port])
+      if (status && status.error) throw new Error(`port ${port} could not be asked: ${status.error}`)
       if (!status || !status.vendorId) {
         throw new Error(`port ${port} reports no IO-Link device`)
       }
@@ -180,8 +207,9 @@ module.exports = function (RED) {
   RED.httpAdmin.get('/iolink-suite/parameters/:id/:port',
     RED.auth.needsPermission('flows.write'),
     withMaster(async (node, req) => {
-      const port = Number(req.params.port)
+      const port = portParam(req)
       const [status] = await node.adapter.scanPorts([port])
+      if (status && status.error) throw new Error(`port ${port} could not be asked: ${status.error}`)
       if (!status || !status.vendorId) throw new Error(`port ${port} reports no IO-Link device`)
       const { device } = await node.iodd.device(
         status.vendorId, status.deviceId, node.parseOptions())
