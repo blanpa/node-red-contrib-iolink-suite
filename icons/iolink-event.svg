@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 60" width="40" height="60" fill="#fff">
-  <!-- Something happened on the port, or the device says it is unwell.
-       The bar and the dot are cut out, so the icon stays one white shape. -->
-  <path fill-rule="evenodd" d="M20 3 39 56 H1 z
-                               M17 22 h6 v18 h-6 z
-                               M20 44 a3.2 3.2 0 1 1 0 6.4 3.2 3.2 0 1 1 0-6.4 z"/>
-</svg>
