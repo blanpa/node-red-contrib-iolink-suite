@@ -1,0 +1,60 @@
+# Test environments for the IO-Link suite.
+#
+#   docker compose -f docker-compose.test.yml run --rm --build unit
+#   docker compose -f docker-compose.test.yml run --rm --build integration
+#
+# `unit` runs the whole suite in a clean container. `integration` installs the
+# packed tarballs into the official Node-RED image, deploys a flow that uses
+# every node against a fake ifm master, and checks what comes out the far end.
+
+services:
+  unit:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.unit
+    command: ["npm", "test"]
+
+  fake-master:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.fake-master
+    environment:
+      # Empty by default: the integration test needs a rack that never moves.
+      # Set it for a demonstration and the ports come from real IODDs with
+      # values that live:
+      #   SIM_PLANT=test/fixtures/simulator-plant.json \
+      #     docker compose -f docker-compose.test.yml up node-red
+      SIM_PLANT: ${SIM_PLANT:-}
+    expose:
+      # Deliberately not published: the test harness must not fight whatever
+      # else on the machine holds a port. From the host, run the simulator
+      # directly (npm run simulator); from inside the compose network it is
+      # http://fake-master:8080/, control API included.
+      - "8080"
+
+  node-red:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.nodered
+    depends_on:
+      - fake-master
+    environment:
+      # Keep the run reproducible: no project mode, no palette phoning home.
+      NODE_RED_ENABLE_PROJECTS: "false"
+    expose:
+      - "1880"
+    ports:
+      # Handy when a failure needs looking at in the editor.
+      - "127.0.0.1:1880:1880"
+
+  integration:
+    image: node:20-alpine
+    depends_on:
+      node-red:
+        condition: service_healthy
+    volumes:
+      - ./test/integration:/tests:ro
+    environment:
+      NODE_RED_URL: http://node-red:1880
+    working_dir: /tests
+    command: ["node", "--test", "/tests"]

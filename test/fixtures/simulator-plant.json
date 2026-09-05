@@ -1,0 +1,41 @@
+{
+  "product": "AL1350",
+  "serial": "SIM-000000001",
+
+  "ports": {
+    "1": {
+      "iodd": "demo-sensor.iodd.xml",
+      "productName": "DEMO-100",
+      "serial": "TI-0001",
+      "values": {
+        "Temperature": { "wave": "sine", "min": 18.5, "max": 24.5, "periodMs": 60000, "decimals": 2 },
+        "Counter": { "wave": "ramp", "min": 0, "max": 16000, "periodMs": 120000, "decimals": 0 },
+        "SwitchingSignal1": { "wave": "square", "periodMs": 8000 },
+        "SwitchingSignal2": false
+      },
+      "deviceStatus": 0,
+      "isdu": {
+        "100/0": "092B",
+        "101/0": "01"
+      }
+    },
+
+    "2": {
+      "iodd": "demo-sensor.iodd.xml",
+      "productName": "DEMO-100",
+      "serial": "TI-0002",
+      "values": {
+        "Temperature": { "wave": "random", "min": 60, "max": 95, "periodMs": 5000, "decimals": 1, "seed": 7 },
+        "Counter": { "wave": "triangle", "min": 0, "max": 500, "periodMs": 30000, "decimals": 0 },
+        "SwitchingSignal1": true,
+        "SwitchingSignal2": { "wave": "square", "periodMs": 20000 }
+      },
+      "deviceStatus": 1,
+      "events": ["0x8C40"]
+    },
+
+    "3": { "connected": false },
+
+    "4": { "connected": false, "mode": 2 }
+  }
+}

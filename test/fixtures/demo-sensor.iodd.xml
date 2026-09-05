@@ -1,0 +1,205 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Hand-written IODD used as a test fixture. It is not a real product: it exists
+  to exercise the parser's features (record process data, enums, scaling via
+  ProcessDataRefCollection, two languages, ISDU parameters, events).
+  Vendor IODDs are copyrighted and are fetched at test time instead
+  (npm run corpus), never committed.
+-->
+<IODevice xmlns="http://www.io-link.com/IODD/2010/10"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <DocumentInfo version="V1.0.0" releaseDate="2026-01-15" copyright="test fixture"/>
+  <ProfileHeader>
+    <ProfileIdentification>IO Device Profile</ProfileIdentification>
+    <ProfileRevision>1.1</ProfileRevision>
+    <ProfileName>Device Profile for IO-Link Devices</ProfileName>
+    <ProfileSource>IO-Link Consortium</ProfileSource>
+    <ProfileClassID>Device</ProfileClassID>
+    <ISO15745Reference>
+      <ISO15745Part>1</ISO15745Part>
+      <ISO15745Edition>1</ISO15745Edition>
+      <ProfileTechnology>IODD</ProfileTechnology>
+    </ISO15745Reference>
+  </ProfileHeader>
+  <ProfileBody>
+    <DeviceIdentity vendorId="999" vendorName="Test Instruments GmbH" deviceId="4242">
+      <VendorText textId="TI_VendorText"/>
+      <VendorUrl textId="TI_VendorUrl"/>
+      <DeviceName textId="TI_DeviceName"/>
+      <DeviceFamily textId="TI_DeviceFamily"/>
+      <DeviceVariantCollection>
+        <DeviceVariant productId="DEMO-100">
+          <Name textId="TI_ProductName"/>
+          <Description textId="TI_ProductDescr"/>
+        </DeviceVariant>
+      </DeviceVariantCollection>
+    </DeviceIdentity>
+    <DeviceFunction>
+      <Features blockParameter="true" dataStorage="true"/>
+      <DatatypeCollection>
+        <Datatype id="DT_Polarity" xsi:type="UIntegerT" bitLength="8">
+          <SingleValue value="0"><Name textId="TI_Polarity_NO"/></SingleValue>
+          <SingleValue value="1"><Name textId="TI_Polarity_NC"/></SingleValue>
+        </Datatype>
+      </DatatypeCollection>
+
+      <VariableCollection>
+        <StdVariableRef id="V_VendorName"/>
+        <StdVariableRef id="V_ProductName"/>
+        <StdVariableRef id="V_SerialNumber"/>
+        <StdVariableRef id="V_ApplicationSpecificTag"/>
+        <Variable id="V_Setpoint" index="100" accessRights="rw" defaultValue="5000">
+          <Datatype xsi:type="IntegerT" bitLength="16">
+            <ValueRange lowerValue="-5000" upperValue="15000"/>
+          </Datatype>
+          <Name textId="TI_Setpoint_Name"/>
+          <Description textId="TI_Setpoint_Descr"/>
+        </Variable>
+        <Variable id="V_Polarity" index="101" accessRights="rw" defaultValue="0">
+          <DatatypeRef datatypeId="DT_Polarity"/>
+          <Name textId="TI_Polarity_Name"/>
+        </Variable>
+        <Variable id="V_Label" index="102" accessRights="rw">
+          <Datatype xsi:type="StringT" fixedLength="8" encoding="UTF-8"/>
+          <Name textId="TI_Label_Name"/>
+        </Variable>
+      </VariableCollection>
+
+      <ProcessDataCollection>
+        <ProcessData id="PD_Main">
+          <ProcessDataIn id="PDI_Main" bitLength="32">
+            <Datatype xsi:type="RecordT" bitLength="32" subindexAccessSupported="false">
+              <RecordItem subindex="1" bitOffset="0">
+                <SimpleDatatype xsi:type="BooleanT">
+                  <SingleValue xsi:type="BooleanValueT" value="true"><Name textId="TI_On"/></SingleValue>
+                  <SingleValue xsi:type="BooleanValueT" value="false"><Name textId="TI_Off"/></SingleValue>
+                </SimpleDatatype>
+                <Name textId="TI_PD_Switch1"/>
+              </RecordItem>
+              <RecordItem subindex="2" bitOffset="1">
+                <SimpleDatatype xsi:type="BooleanT"/>
+                <Name textId="TI_PD_Switch2"/>
+              </RecordItem>
+              <RecordItem subindex="3" bitOffset="2">
+                <SimpleDatatype xsi:type="UIntegerT" bitLength="14"/>
+                <Name textId="TI_PD_Counter"/>
+              </RecordItem>
+              <RecordItem subindex="4" bitOffset="16">
+                <SimpleDatatype xsi:type="IntegerT" bitLength="16">
+                  <ValueRange xsi:type="IntegerValueRangeT" lowerValue="-5000" upperValue="15000"/>
+                  <SingleValue xsi:type="IntegerValueT" value="-32768"><Name textId="TI_Invalid"/></SingleValue>
+                </SimpleDatatype>
+                <Name textId="TI_PD_Temperature"/>
+                <Description textId="TI_PD_Temperature_Descr"/>
+              </RecordItem>
+            </Datatype>
+            <Name textId="TI_PD_In"/>
+          </ProcessDataIn>
+          <ProcessDataOut id="PDO_Main" bitLength="8">
+            <Datatype xsi:type="RecordT" bitLength="8" subindexAccessSupported="false">
+              <RecordItem subindex="1" bitOffset="0">
+                <SimpleDatatype xsi:type="BooleanT"/>
+                <Name textId="TI_PD_Valve"/>
+              </RecordItem>
+              <RecordItem subindex="2" bitOffset="1">
+                <SimpleDatatype xsi:type="UIntegerT" bitLength="7"/>
+                <Name textId="TI_PD_Intensity"/>
+              </RecordItem>
+            </Datatype>
+            <Name textId="TI_PD_Out"/>
+          </ProcessDataOut>
+        </ProcessData>
+      </ProcessDataCollection>
+
+      <EventCollection>
+        <StdEventRef code="20480"/>
+        <StdEventRef code="30480"/>
+        <Event code="6399" type="Warning">
+          <Name textId="TI_Ev_Vendor_Name"/>
+          <Description textId="TI_Ev_Vendor_Descr"/>
+        </Event>
+      </EventCollection>
+
+      <UserInterface>
+        <ProcessDataRefCollection>
+          <ProcessDataRef processDataId="PDI_Main">
+            <ProcessDataRecordItemInfo subindex="1"/>
+            <ProcessDataRecordItemInfo subindex="2"/>
+            <ProcessDataRecordItemInfo subindex="3" displayFormat="Dec.0"/>
+            <ProcessDataRecordItemInfo subindex="4" gradient="0.01" offset="0" unitCode="1001" displayFormat="Dec.2"/>
+          </ProcessDataRef>
+          <ProcessDataRef processDataId="PDO_Main">
+            <ProcessDataRecordItemInfo subindex="1"/>
+            <ProcessDataRecordItemInfo subindex="2" gradient="1" offset="0" unitCode="1342" displayFormat="Dec.0"/>
+          </ProcessDataRef>
+        </ProcessDataRefCollection>
+        <MenuCollection>
+          <Menu id="M_Identification">
+            <Name textId="TI_M_Identification"/>
+            <VariableRef variableId="V_VendorName"/>
+            <VariableRef variableId="V_ProductName"/>
+            <VariableRef variableId="V_SerialNumber"/>
+            <VariableRef variableId="V_ApplicationSpecificTag"/>
+          </Menu>
+          <Menu id="M_Parameter">
+            <Name textId="TI_M_Parameter"/>
+            <VariableRef variableId="V_Setpoint" gradient="0.01" offset="0" unitCode="1001" displayFormat="Dec.2"/>
+            <VariableRef variableId="V_Polarity"/>
+            <VariableRef variableId="V_Label"/>
+          </Menu>
+        </MenuCollection>
+        <ObserverRoleMenuSet>
+          <IdentificationMenu menuId="M_Identification"/>
+          <ParameterMenu menuId="M_Parameter"/>
+        </ObserverRoleMenuSet>
+      </UserInterface>
+    </DeviceFunction>
+  </ProfileBody>
+  <CommNetworkProfile xsi:type="IOLinkCommNetworkProfileT" iolinkRevision="V1.1">
+    <TransportLayers>
+      <PhysicalLayer bitrate="COM2" minCycleTime="2300" sioSupported="true" mSequenceCapability="17"/>
+    </TransportLayers>
+  </CommNetworkProfile>
+  <ExternalTextCollection>
+    <PrimaryLanguage xml:lang="en">
+      <Text id="TI_VendorText" value="Test Instruments"/>
+      <Text id="TI_VendorUrl" value="https://example.invalid"/>
+      <Text id="TI_DeviceName" value="Demo Temperature Sensor"/>
+      <Text id="TI_DeviceFamily" value="DEMO"/>
+      <Text id="TI_ProductName" value="DEMO-100"/>
+      <Text id="TI_ProductDescr" value="Demonstration temperature sensor"/>
+      <Text id="TI_PD_In" value="Process Data Input"/>
+      <Text id="TI_PD_Out" value="Process Data Output"/>
+      <Text id="TI_PD_Switch1" value="SwitchingSignal1"/>
+      <Text id="TI_PD_Switch2" value="SwitchingSignal2"/>
+      <Text id="TI_PD_Counter" value="Counter"/>
+      <Text id="TI_PD_Temperature" value="Temperature"/>
+      <Text id="TI_PD_Temperature_Descr" value="Current process temperature"/>
+      <Text id="TI_PD_Valve" value="Valve"/>
+      <Text id="TI_PD_Intensity" value="Intensity"/>
+      <Text id="TI_On" value="Closed"/>
+      <Text id="TI_Off" value="Open"/>
+      <Text id="TI_Invalid" value="Invalid measurement"/>
+      <Text id="TI_Setpoint_Name" value="Switch point"/>
+      <Text id="TI_Setpoint_Descr" value="Switching threshold"/>
+      <Text id="TI_Polarity_Name" value="Output polarity"/>
+      <Text id="TI_Polarity_NO" value="Normally open"/>
+      <Text id="TI_Polarity_NC" value="Normally closed"/>
+      <Text id="TI_Label_Name" value="Label"/>
+      <Text id="TI_M_Identification" value="Identification"/>
+      <Text id="TI_M_Parameter" value="Parameter"/>
+      <Text id="TI_Ev_Vendor_Name" value="Sensor element drift"/>
+      <Text id="TI_Ev_Vendor_Descr" value="Recalibrate the sensor"/>
+    </PrimaryLanguage>
+    <Language xml:lang="de">
+      <Text id="TI_DeviceName" value="Demo-Temperatursensor"/>
+      <Text id="TI_PD_Temperature" value="Temperatur"/>
+      <Text id="TI_PD_Switch1" value="Schaltsignal1"/>
+      <Text id="TI_On" value="Schließer"/>
+      <Text id="TI_Off" value="Öffner"/>
+      <Text id="TI_Setpoint_Name" value="Schaltpunkt"/>
+      <Text id="TI_Polarity_NO" value="Schließer"/>
+      <Text id="TI_Polarity_NC" value="Öffner"/>
+    </Language>
+  </ExternalTextCollection>
+</IODevice>

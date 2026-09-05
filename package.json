@@ -1,0 +1,66 @@
+{
+  "name": "node-red-contrib-iolink-suite",
+  "version": "0.0.1",
+  "description": "Node-RED nodes for IO-Link masters: read and write process data decoded through the device's IODD, read and write ISDU parameters by name, and decode raw IO-Link bytes from any source.",
+  "license": "Apache-2.0",
+  "author": "blanpa",
+  "homepage": "https://github.com/blanpa/node-red-contrib-iolink-suite#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/blanpa/node-red-contrib-iolink-suite.git"
+  },
+  "bugs": {
+    "url": "https://github.com/blanpa/node-red-contrib-iolink-suite/issues"
+  },
+  "keywords": [
+    "node-red",
+    "io-link",
+    "iolink",
+    "iodd",
+    "ifm",
+    "iot-core",
+    "industrial",
+    "automation",
+    "sensor"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "node-red": {
+    "version": ">=3.0.0",
+    "nodes": {
+      "iolink-master": "nodes/iolink-master.js",
+      "iolink-read": "nodes/iolink-read.js",
+      "iolink-write": "nodes/iolink-write.js",
+      "iolink-param": "nodes/iolink-param.js",
+      "iolink-event": "nodes/iolink-event.js",
+      "iolink-scan": "nodes/iolink-scan.js",
+      "iodd-decode": "nodes/iodd-decode.js"
+    }
+  },
+  "main": "lib/iodd/index.js",
+  "scripts": {
+    "test": "node --test test/*.test.js test/iodd/*.test.js",
+    "simulator": "node test/fake-master.js test/fixtures/simulator-plant.json",
+    "corpus": "node scripts/fetch-corpus.js",
+    "gen:units": "node scripts/gen-units.js",
+    "record": "node scripts/record-master.js",
+    "test:docker": "docker compose -f docker-compose.test.yml run --rm --build unit",
+    "test:integration": "docker compose -f docker-compose.test.yml run --rm --build integration",
+    "test:all": "npm run test:docker && npm run test:integration",
+    "lint": "standard && node scripts/lint-editors.js",
+    "lint:fix": "standard --fix"
+  },
+  "dependencies": {
+    "fast-xml-parser": "^4.5.0"
+  },
+  "files": [
+    "lib/",
+    "nodes/",
+    "examples/",
+    "README.md"
+  ],
+  "devDependencies": {
+    "standard": "^17.1.2"
+  }
+}

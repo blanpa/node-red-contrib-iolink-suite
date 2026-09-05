@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 60" width="40" height="60" fill="#000">
+  <!-- One mark for the whole suite: the letters IO, drawn as shapes rather
+       than set in a font, so they come out the same wherever the editor
+       renders them. The box is portrait and the word is not, so the letters
+       are condensed to earn the height. Black reads on the one colour every
+       node in the suite carries; it would not on a dark node. -->
+  <rect x="3" y="15" width="8" height="30"/>
+  <ellipse cx="26" cy="30" rx="7.5" ry="11.5" fill="none" stroke="#000" stroke-width="7"/>
+</svg>

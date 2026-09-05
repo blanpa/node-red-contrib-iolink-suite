@@ -1,0 +1,449 @@
+[
+    {
+        "id": "tab-integration",
+        "type": "tab",
+        "label": "iolink suite integration test",
+        "disabled": false,
+        "info": "Exercised by test/integration. Each endpoint drives one node of the suite against the fake ifm master and answers with what came out."
+    },
+    {
+        "id": "cfg-master",
+        "type": "iolink-master",
+        "name": "fake ifm master",
+        "profile": "ifm",
+        "host": "",
+        "httpPort": "",
+        "url": "http://fake-master:8080/",
+        "tls": false,
+        "timeout": "4000",
+        "ports": "1,2,3",
+        "language": "en",
+        "keyStyle": "preserve",
+        "ioddDir": "/data/iodd",
+        "ioddCacheDir": "",
+        "offline": true,
+        "paths": "",
+        "valuePath": ""
+    },
+    {
+        "id": "in-read",
+        "type": "http in",
+        "z": "tab-integration",
+        "name": "",
+        "url": "/read",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 130,
+        "y": 80,
+        "wires": [
+            [
+                "node-read"
+            ]
+        ]
+    },
+    {
+        "id": "node-read",
+        "type": "iolink-read",
+        "z": "tab-integration",
+        "name": "",
+        "master": "cfg-master",
+        "port": "1",
+        "portType": "num",
+        "values": [],
+        "variant": "",
+        "conditions": "",
+        "enums": "value",
+        "output": "single",
+        "topicPrefix": "",
+        "interval": 0,
+        "identityTtl": 30000,
+        "vendorId": "",
+        "deviceId": "",
+        "x": 340,
+        "y": 80,
+        "wires": [
+            [
+                "fn-envelope"
+            ]
+        ]
+    },
+    {
+        "id": "in-write",
+        "type": "http in",
+        "z": "tab-integration",
+        "name": "",
+        "url": "/write",
+        "method": "post",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 130,
+        "y": 140,
+        "wires": [
+            [
+                "node-write"
+            ]
+        ]
+    },
+    {
+        "id": "node-write",
+        "type": "iolink-write",
+        "z": "tab-integration",
+        "name": "",
+        "master": "cfg-master",
+        "port": "1",
+        "portType": "num",
+        "values": "",
+        "variant": "",
+        "merge": true,
+        "ignoreRange": false,
+        "identityTtl": 30000,
+        "vendorId": "",
+        "deviceId": "",
+        "x": 340,
+        "y": 140,
+        "wires": [
+            [
+                "fn-envelope"
+            ]
+        ]
+    },
+    {
+        "id": "in-param",
+        "type": "http in",
+        "z": "tab-integration",
+        "name": "",
+        "url": "/param",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 130,
+        "y": 200,
+        "wires": [
+            [
+                "node-param"
+            ]
+        ]
+    },
+    {
+        "id": "node-param",
+        "type": "iolink-param",
+        "z": "tab-integration",
+        "name": "",
+        "master": "cfg-master",
+        "port": "1",
+        "portType": "num",
+        "action": "read",
+        "parameter": "Switch point",
+        "parameterType": "str",
+        "subindex": 0,
+        "identityTtl": 30000,
+        "vendorId": "",
+        "deviceId": "",
+        "x": 340,
+        "y": 200,
+        "wires": [
+            [
+                "fn-envelope"
+            ]
+        ]
+    },
+    {
+        "id": "in-scan",
+        "type": "http in",
+        "z": "tab-integration",
+        "name": "",
+        "url": "/scan",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 130,
+        "y": 260,
+        "wires": [
+            [
+                "node-scan"
+            ]
+        ]
+    },
+    {
+        "id": "node-scan",
+        "type": "iolink-scan",
+        "z": "tab-integration",
+        "name": "",
+        "master": "cfg-master",
+        "ports": "1,2,3",
+        "resolveIodd": true,
+        "x": 340,
+        "y": 260,
+        "wires": [
+            [
+                "fn-envelope"
+            ]
+        ]
+    },
+    {
+        "id": "node-event",
+        "type": "iolink-event",
+        "z": "tab-integration",
+        "name": "watch ports and device health",
+        "master": "cfg-master",
+        "ports": "1,2",
+        "interval": 2000,
+        "deviceStatus": true,
+        "x": 640,
+        "y": 620,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "in-decode",
+        "type": "http in",
+        "z": "tab-integration",
+        "name": "",
+        "url": "/decode",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 130,
+        "y": 320,
+        "wires": [
+            [
+                "fn-raw"
+            ]
+        ]
+    },
+    {
+        "id": "fn-raw",
+        "type": "function",
+        "z": "tab-integration",
+        "name": "raw bytes from elsewhere",
+        "func": "msg.payload = msg.req.query.hex || '092b0929';\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 340,
+        "y": 320,
+        "wires": [
+            [
+                "node-decode"
+            ]
+        ]
+    },
+    {
+        "id": "node-decode",
+        "type": "iodd-decode",
+        "z": "tab-integration",
+        "name": "",
+        "iodd": "/data/iodd/demo-sensor.iodd.xml",
+        "mode": "decode",
+        "direction": "in",
+        "variant": "",
+        "conditions": "",
+        "language": "en",
+        "keyStyle": "preserve",
+        "enums": "value",
+        "strictLength": false,
+        "x": 600,
+        "y": 320,
+        "wires": [
+            [
+                "fn-envelope"
+            ]
+        ]
+    },
+    {
+        "id": "in-split",
+        "type": "http in",
+        "z": "tab-integration",
+        "name": "",
+        "url": "/split",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 130,
+        "y": 380,
+        "wires": [
+            [
+                "node-split"
+            ]
+        ]
+    },
+    {
+        "id": "node-split",
+        "type": "iolink-read",
+        "z": "tab-integration",
+        "name": "",
+        "master": "cfg-master",
+        "port": "1",
+        "portType": "num",
+        "values": [
+            "Temperature"
+        ],
+        "variant": "",
+        "conditions": "",
+        "enums": "value",
+        "output": "split",
+        "topicPrefix": "plant/line1",
+        "interval": 0,
+        "identityTtl": 30000,
+        "vendorId": "",
+        "deviceId": "",
+        "x": 340,
+        "y": 380,
+        "wires": [
+            [
+                "fn-envelope"
+            ]
+        ]
+    },
+    {
+        "id": "fn-envelope",
+        "type": "function",
+        "z": "tab-integration",
+        "name": "message -> body",
+        "func": "return {\n    res: msg.res,\n    req: msg.req,\n    payload: {\n        topic: msg.topic,\n        payload: msg.payload,\n        meta: msg.meta,\n        device: msg.device,\n        iolink: msg.iolink,\n        errors: msg.errors,\n        timestamp: msg.timestamp\n    }\n};",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 600,
+        "y": 200,
+        "wires": [
+            [
+                "out-response"
+            ]
+        ]
+    },
+    {
+        "id": "catch-all",
+        "type": "catch",
+        "z": "tab-integration",
+        "name": "",
+        "scope": null,
+        "uncaught": false,
+        "x": 130,
+        "y": 460,
+        "wires": [
+            [
+                "fn-error"
+            ]
+        ]
+    },
+    {
+        "id": "fn-error",
+        "type": "function",
+        "z": "tab-integration",
+        "name": "error -> 500",
+        "func": "msg.statusCode = 500;\nmsg.payload = { error: msg.error && msg.error.message };\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 340,
+        "y": 460,
+        "wires": [
+            [
+                "out-response"
+            ]
+        ]
+    },
+    {
+        "id": "out-response",
+        "type": "http response",
+        "z": "tab-integration",
+        "name": "",
+        "statusCode": "",
+        "headers": {},
+        "x": 830,
+        "y": 260,
+        "wires": []
+    },
+    {
+        "id": "in-read-many",
+        "type": "http in",
+        "z": "tab-integration",
+        "name": "",
+        "url": "/read-many",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 130,
+        "y": 510,
+        "wires": [
+            [
+                "node-read-many"
+            ]
+        ]
+    },
+    {
+        "id": "node-read-many",
+        "type": "iolink-read",
+        "z": "tab-integration",
+        "name": "",
+        "master": "cfg-master",
+        "port": "1,2",
+        "portType": "str",
+        "values": [],
+        "variant": "",
+        "conditions": "",
+        "enums": "value",
+        "output": "single",
+        "topicPrefix": "",
+        "interval": 0,
+        "identityTtl": 30000,
+        "vendorId": "",
+        "deviceId": "",
+        "x": 340,
+        "y": 510,
+        "wires": [
+            [
+                "fn-envelope"
+            ]
+        ]
+    },
+    {
+        "id": "in-param-many",
+        "type": "http in",
+        "z": "tab-integration",
+        "name": "",
+        "url": "/param-many",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 130,
+        "y": 560,
+        "wires": [
+            [
+                "node-param-many"
+            ]
+        ]
+    },
+    {
+        "id": "node-param-many",
+        "type": "iolink-param",
+        "z": "tab-integration",
+        "name": "",
+        "master": "cfg-master",
+        "port": "1",
+        "portType": "num",
+        "action": "read",
+        "parameter": "Switch point, Output polarity",
+        "parameterType": "str",
+        "subindex": "",
+        "identityTtl": 30000,
+        "vendorId": "",
+        "deviceId": "",
+        "x": 340,
+        "y": 560,
+        "wires": [
+            [
+                "fn-envelope"
+            ]
+        ]
+    }
+]

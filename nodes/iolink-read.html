@@ -1,0 +1,417 @@
+<script type="text/javascript">
+  RED.nodes.registerType('iolink-read', {
+    category: 'IO Link Suite',
+    color: '#c0deed',
+    defaults: {
+      name: { value: '' },
+      master: { value: '', type: 'iolink-master', required: true },
+      port: { value: '1', required: true },
+      portType: { value: 'num' },
+      values: { value: [] },
+      variant: { value: '' },
+      conditions: { value: '' },
+      enums: { value: 'value' },
+      output: { value: 'single' },
+      topicPrefix: { value: '' },
+      interval: { value: 0 },
+      identityTtl: { value: 30000 },
+      vendorId: { value: '' },
+      deviceId: { value: '' }
+    },
+    inputs: 1,
+    outputs: 1,
+    icon: 'iolink.svg',
+    label: function () {
+      if (this.name) return this.name
+      const port = String(this.port || '?')
+      return (port.indexOf(',') >= 0 ? 'read ports ' : 'read port ') + port
+    },
+    oneditprepare: function () {
+      const node = this
+      $('#node-input-port').typedInput({
+        default: 'num',
+        typeField: '#node-input-portType',
+        // str carries a list: a num field cannot hold "1,3", and a list from a
+        // message arrives as an array through msg/flow/global just as well.
+        types: ['num', 'str', 'msg', 'flow', 'global', 'env']
+      })
+      $('#node-input-output').on('change', function () {
+        $('.iolink-split-only').toggle($(this).val() === 'split')
+      }).trigger('change')
+
+      const list = $('#iolink-values')
+      // Whether the list on screen came from the device. Until it has, it only
+      // shows the saved selection, and "everything ticked" there means "the
+      // selection is unchanged", not "no filter".
+      node._ioddScanned = false
+
+      // Ports typed into the field, for the picker. Only a literal list can be
+      // read here; a port that comes from a message is not known until one
+      // arrives, so that scan falls back to whatever the field says.
+      function typedPorts () {
+        const type = $('#node-input-portType').val() || 'num'
+        const raw = String($('#node-input-port').val() || '')
+        if (type !== 'num' && type !== 'str') return []
+        const seen = []
+        raw.split(',').forEach(function (part) {
+          const port = Number(part.trim())
+          if (Number.isInteger(port) && port >= 1 && seen.indexOf(port) < 0) seen.push(port)
+        })
+        return seen
+      }
+
+      function renderChecklist (groups) {
+        list.empty()
+        const selected = node.values || []
+        // No selection means "everything", which is the useful default: a fresh
+        // node should emit the whole block rather than nothing.
+        const all = selected.length === 0
+        const many = groups.length > 1
+        let shown = 0
+
+        function renderItem (item, port) {
+          // Two ports of one device type carry the same value names, so the
+          // element id has to carry the port. Without it the second port's
+          // tickbox would repeat an id and its label would drive the first one.
+          const id = 'iolink-val-' + port + '-' + item.key.replace(/\W/g, '_')
+          const row = $('<div>').css({ padding: '2px 0', marginLeft: many ? '12px' : '0' })
+          $('<input type="checkbox">')
+            .attr('id', id).css({ width: 'auto', marginRight: '6px' })
+            .prop('checked', all || selected.indexOf(item.key) >= 0)
+            .data('key', item.key)
+            .appendTo(row)
+          const label = $('<label>').attr('for', id)
+            .css({ width: 'auto', display: 'inline' })
+            .text(item.name || item.key)
+          if (item.unit) label.append($('<span>').css({ color: '#888' }).text(' [' + item.unit + ']'))
+          label.append($('<span>').css({ color: '#aaa', fontSize: '0.85em' })
+            .text('  ' + item.type + item.bitLength + ' @bit ' + item.bitOffset))
+          label.appendTo(row)
+          if (item.scalingAmbiguous) {
+            $('<div>').css({ color: '#b8860b', fontSize: '0.85em', marginLeft: '20px' })
+              .text('scaling depends on a parameter (' +
+                item.scalingAmbiguous.map(function (a) { return a.unit || a.gradient }).join(' / ') +
+                ') — set it under Conditions, otherwise this value stays raw')
+              .appendTo(row)
+          }
+          if (item.description) {
+            $('<div>').css({ color: '#999', fontSize: '0.85em', marginLeft: '20px' })
+              .text(item.description).appendTo(row)
+          }
+          row.appendTo(list)
+        }
+
+        groups.forEach(function (group) {
+          if (many) {
+            $('<div>').css({ fontWeight: 'bold', margin: '8px 0 2px' })
+              .text('Port ' + group.port + (group.product ? ' — ' + group.product : ''))
+              .appendTo(list)
+          }
+          if (group.error) {
+            $('<div>').css({ color: '#b8860b', marginLeft: many ? '12px' : '0', padding: '2px 0' })
+              .text(group.error).appendTo(list)
+            return
+          }
+          group.items.forEach(function (item) {
+            shown++
+            renderItem(item, group.port)
+          })
+        })
+
+        if (!shown) {
+          list.append($('<div class="form-tips">').text('No values found.'))
+        } else if (many) {
+          list.append($('<div class="form-tips">').css({ marginTop: '8px' })
+            .text('Values are picked by name and apply to every port listed. ' +
+                  'To take a value from one port only, use a second read node.'))
+        }
+      }
+
+      $('#iolink-scan').on('click', function () {
+        const masterId = $('#node-input-master').val()
+        const status = $('#iolink-scan-status').text('scanning…').css('color', '')
+        if (!masterId || masterId === '_ADD_') {
+          return status.css('color', '#a44').text('choose and deploy a master first')
+        }
+        const ports = typedPorts()
+        if (!ports.length) {
+          return status.css('color', '#a44')
+            .text('type the port here to scan it — a port that comes from a message is not known yet')
+        }
+        const variant = $('#node-input-variant').val()
+        const query = '?direction=in' +
+          (variant ? '&variant=' + encodeURIComponent(variant) : '')
+
+        // One port after another, the way the node itself reads them, so a rack
+        // is not hit with a request per port at once from the editor either.
+        const groups = []
+        let variants = null
+
+        function fill (index) {
+          if (index >= ports.length) return finish()
+          const port = ports[index]
+          $.getJSON('iolink-suite/datapoints/' + masterId + '/' + port + query)
+            .done(function (result) {
+              if (result.error) {
+                groups.push({ port: port, error: result.error })
+              } else {
+                groups.push({
+                  port: port,
+                  product: result.device && result.device.productName,
+                  octets: result.layout && result.layout.octetLength,
+                  vendor: result.device && result.device.vendorName,
+                  items: result.items || []
+                })
+                if (!variants) variants = result.variants || []
+              }
+              fill(index + 1)
+            })
+            .fail(function (xhr) {
+              const body = xhr.responseJSON || {}
+              groups.push({ port: port, error: body.error || 'scan failed' })
+              fill(index + 1)
+            })
+        }
+
+        function finish () {
+          const good = groups.filter(function (g) { return !g.error })
+          if (!good.length) {
+            status.css('color', '#a44').text(groups[0].error)
+          } else if (good.length < groups.length) {
+            status.css('color', '#b8860b')
+              .text(good.length + ' of ' + groups.length + ' ports answered')
+          } else if (good.length === 1) {
+            status.css('color', '#4a4').text(
+              good[0].vendor + ' ' + good[0].product + ' — ' + good[0].octets + ' octets')
+          } else {
+            status.css('color', '#4a4').text(good.length + ' ports read')
+          }
+          // The layout applies to every port the node reads, so it is offered
+          // from the first device that had one to offer.
+          const select = $('#node-input-variant')
+          const current = select.val()
+          select.empty().append($('<option>').val('').text('(automatic)'))
+          ;(variants || []).forEach(function (v) {
+            const text = v.id + (v.condition
+              ? ' — when ' + v.condition.variableId + ' = ' + v.condition.value
+              : '')
+            select.append($('<option>').val(v.id).text(text))
+          })
+          select.val(current)
+          $('.iolink-variant-row').toggle((variants || []).length > 1)
+          renderChecklist(groups)
+          node._ioddScanned = good.length > 0
+        }
+
+        fill(0)
+      })
+
+      $('#iolink-select-all').on('click', function () {
+        list.find('input[type=checkbox]').prop('checked', true)
+      })
+      $('#iolink-select-none').on('click', function () {
+        list.find('input[type=checkbox]').prop('checked', false)
+      })
+
+      if (node.values && node.values.length) {
+        renderChecklist([{
+          port: typedPorts()[0] || 1,
+          items: node.values.map(function (k) {
+            return { key: k, name: k, type: '', bitLength: '', bitOffset: '' }
+          })
+        }])
+        $('#iolink-scan-status').css('color', '#888')
+          .text('showing the saved selection — scan to refresh from the device')
+      }
+    },
+    oneditsave: function () {
+      const boxes = $('#iolink-values input[type=checkbox]')
+      const checked = boxes.filter(':checked')
+      // All ticked is stored as "no filter", so a later firmware change that
+      // adds a value does not silently drop it from the output. Only once the
+      // list came from the device, though: before a scan the list is the saved
+      // selection itself, and all of it ticked used to be read as "no filter",
+      // so opening the node to rename it and pressing Done emptied the filter.
+      if (this._ioddScanned && boxes.length && checked.length === boxes.length) {
+        this.values = []
+        return
+      }
+      // A name ticked under two ports is one entry: values are picked by name
+      // and apply to every port the node reads.
+      const keys = []
+      checked.each(function () {
+        const key = $(this).data('key')
+        if (keys.indexOf(key) < 0) keys.push(key)
+      })
+      this.values = keys
+    }
+  })
+</script>
+
+<script type="text/html" data-template-name="iolink-read">
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-input-name">
+  </div>
+  <div class="form-row">
+    <label for="node-input-master"><i class="fa fa-server"></i> Master</label>
+    <input type="text" id="node-input-master">
+  </div>
+  <div class="form-row">
+    <label for="node-input-port"><i class="fa fa-plug"></i> Port</label>
+    <input type="text" id="node-input-port">
+    <input type="hidden" id="node-input-portType">
+  </div>
+  <div class="form-row" style="margin-top:-6px">
+    <label>&nbsp;</label>
+    <span style="color:#888">one port, or several as a string: <code>1,3</code></span>
+  </div>
+
+  <div class="form-row">
+    <button type="button" class="red-ui-button" id="iolink-scan">
+      <i class="fa fa-search"></i> Scan port
+    </button>
+    <button type="button" class="red-ui-button" id="iolink-select-all">All</button>
+    <button type="button" class="red-ui-button" id="iolink-select-none">None</button>
+    <span id="iolink-scan-status" style="margin-left:10px"></span>
+  </div>
+  <div class="form-row">
+    <div id="iolink-values"
+         style="max-height:260px;overflow:auto;border:1px solid #ccc;border-radius:4px;padding:6px">
+      <div class="form-tips">Press <b>Scan port</b> to read the device's IODD and list its values.</div>
+    </div>
+  </div>
+
+  <div class="form-row iolink-variant-row" style="display:none">
+    <label for="node-input-variant"><i class="fa fa-code-fork"></i> Layout</label>
+    <select id="node-input-variant" style="width:70%"></select>
+  </div>
+  <div class="form-row">
+    <label for="node-input-conditions"><i class="fa fa-sliders"></i> Conditions</label>
+    <input type="text" id="node-input-conditions" placeholder='{"V_uni": 1}'>
+  </div>
+  <div class="form-row">
+    <label for="node-input-enums"><i class="fa fa-list"></i> Enums</label>
+    <select id="node-input-enums" style="width:70%">
+      <option value="value">Value, with the text in meta</option>
+      <option value="text">Text in the payload</option>
+    </select>
+  </div>
+  <div class="form-row">
+    <label for="node-input-output"><i class="fa fa-sign-out"></i> Output</label>
+    <select id="node-input-output" style="width:70%">
+      <option value="single">One message, all values</option>
+      <option value="split">One message per value</option>
+    </select>
+  </div>
+  <div class="form-row iolink-split-only">
+    <label for="node-input-topicPrefix"><i class="fa fa-hashtag"></i> Topic prefix</label>
+    <input type="text" id="node-input-topicPrefix" placeholder="iolink/port1">
+  </div>
+  <div class="form-row">
+    <label for="node-input-interval"><i class="fa fa-repeat"></i> Poll</label>
+    <input type="text" id="node-input-interval" style="width:100px" placeholder="0"> ms
+    <span style="color:#888">0 reads only on an incoming message</span>
+  </div>
+
+  <hr>
+  <h4 style="margin:0 0 10px">Device identity</h4>
+  <div class="form-row">
+    <label for="node-input-identityTtl"><i class="fa fa-hourglass-half"></i> Re-check</label>
+    <input type="text" id="node-input-identityTtl" style="width:100px" placeholder="30000"> ms
+    <span style="color:#888">how long the device on the port is taken as unchanged</span>
+  </div>
+  <div class="form-row">
+    <label for="node-input-vendorId"><i class="fa fa-building"></i> Vendor ID</label>
+    <input type="text" id="node-input-vendorId" style="width:100px" placeholder="read from the port">
+    <label for="node-input-deviceId" style="width:auto;margin-left:12px">Device ID</label>
+    <input type="text" id="node-input-deviceId" style="width:100px" placeholder="read from the port">
+  </div>
+  <div class="form-tips">
+    Leave the ids empty and the node asks the port who is on it. Fill them in for
+    a master that cannot report a device's identity, or to hold one port to one
+    device type — the node then loads that IODD and never asks.
+  </div>
+</script>
+
+<script type="text/html" data-help-name="iolink-read">
+  <p>Reads process data and decodes it through the connected device's IODD.
+     No bit offsets by hand.</p>
+
+  <h3>One port, or several</h3>
+  <p><b>Port</b> takes a single port, or a list of them as a string
+     (<code>1,3</code>); from a message it takes a number or an array. A port
+     named twice is read once.</p>
+  <p>One port produces the message it always did, with the values directly under
+     <code>msg.payload</code>. Several produce one message keyed by port, so
+     <code>msg.payload[1].Temperature</code> is what the single-port form calls
+     <code>msg.payload.Temperature</code>. <code>meta</code>, <code>device</code>
+     and <code>iolink</code> are keyed the same way. A flow that grows from one
+     port to two changes in one place.</p>
+  <p>The ports are read one after another, not at once, because a master is a
+     small device on the end of a wire. A port that does not answer — an empty
+     socket, a device without an IODD — does not cost the others their reading:
+     it is left out of the payload and named under <code>msg.errors</code>
+     instead. Only when no port at all answers does the read fail and reach a
+     Catch node.</p>
+
+  <h3>Scan port</h3>
+  <p>Asks the master which device is on each port listed, fetches its IODD, and
+     lists the available values with their names and units. Tick what you want.
+     Leave everything ticked to emit the whole block.</p>
+  <p>Values are picked by name and apply to every port the node reads, which is
+     what you want for a line of identical sensors. To take a value from one
+     port only, give that port its own read node.</p>
+
+  <h3>Outputs</h3>
+  <dl class="message-properties">
+    <dt>payload <span class="property-type">object</span></dt>
+    <dd>Flat <code>name → value</code>, already scaled into engineering units.</dd>
+    <dt>meta <span class="property-type">object</span></dt>
+    <dd>Per value: unit, type, range, the raw count, and the resolved enum text.
+        Kept beside the payload, not inside it, so the payload can be forwarded
+        to MQTT or a historian unchanged.</dd>
+    <dt>device <span class="property-type">object</span></dt>
+    <dd>Vendor, product, ids, serial and port.</dd>
+    <dt>iolink <span class="property-type">object</span></dt>
+    <dd>The raw hex, the layout used, and any IODD warnings.</dd>
+  </dl>
+  <p>In <b>one message per value</b> mode the node emits one message per value
+     with <code>msg.topic</code> set, which drops straight into an MQTT out node.
+     Ports that did not answer are named under <code>msg.errors</code> on every
+     one of those messages, since there is no other message to carry them.</p>
+  <p>A selected value the device does not carry (after a firmware update, a
+     changed key style, or a different device on the port) is reported once as
+     a warning naming the value, rather than silently left out.</p>
+
+  <h3>Layouts and conditions</h3>
+  <p>Some devices change their process data layout, or the unit they report in,
+     according to a parameter. Where that is the case the node cannot know which
+     applies: pick the <b>Layout</b> explicitly, and state the parameter value
+     under <b>Conditions</b> (for example <code>{"V_uni": 1}</code> for a sensor
+     set to bar). Until then the affected values are passed through unscaled
+     rather than reported in the wrong unit.</p>
+
+  <h3>Polling</h3>
+  <p>With a poll interval the node reads on its own: once as soon as the flow is
+     deployed, and then on every tick. A tick is skipped rather than queued if
+     the previous read is still running, so a slow master cannot build a backlog,
+     and nothing is sent once the flow is stopped.</p>
+
+  <h3>Device identity</h3>
+  <p>The node normally asks the port which device is on it and caches the answer
+     for <b>Re-check</b>, since asking before every read would triple the traffic
+     to the master. Shorten it if devices are swapped while the flow runs;
+     lengthen it for a rack that never changes. The cache is shared by every
+     node on the master, so three nodes on one port ask it once, and the node
+     with the shortest re-check refreshes it for the others.</p>
+  <p>A master that cannot be reached at all fails with
+     <code>IOLINK_MASTER_UNREACHABLE</code>, which is a different thing from
+     <code>IOLINK_NO_DEVICE</code>: the first says the rack has gone quiet, the
+     second that this port is empty. An outage is not cached, so the first read
+     after the master returns succeeds.</p>
+  <p>Setting <b>Vendor ID</b> and <b>Device ID</b> pins the device instead: the
+     node loads that IODD and stops asking. That is the answer for a master whose
+     API cannot report an identity, and a way to make a port refuse to decode
+     anything but the device it is meant to carry.</p>
+</script>

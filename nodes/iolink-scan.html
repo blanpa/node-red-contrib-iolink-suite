@@ -1,0 +1,103 @@
+<script type="text/javascript">
+  RED.nodes.registerType('iolink-scan', {
+    category: 'IO Link Suite',
+    color: '#c0deed',
+    defaults: {
+      name: { value: '' },
+      master: { value: '', type: 'iolink-master', required: true },
+      ports: { value: '' },
+      resolveIodd: { value: true }
+    },
+    inputs: 1,
+    outputs: 1,
+    icon: 'iolink.svg',
+    label: function () { return this.name || 'scan master' },
+    oneditprepare: function () {
+      $('#iolink-scan').on('click', function () {
+        const masterId = $('#node-input-master').val()
+        const status = $('#iolink-scan-status').text('scanning…').css('color', '')
+        if (!masterId || masterId === '_ADD_') {
+          return status.css('color', '#a44').text('choose and deploy a master first')
+        }
+        $.getJSON('iolink-suite/scan/' + masterId)
+          .done(function (ports) {
+            const used = ports.filter(function (p) { return p.connected })
+            status.css('color', '#4a4').text(used.length + ' of ' + ports.length + ' ports in use')
+            const list = $('#iolink-ports').empty()
+            ports.forEach(function (p) {
+              const id = p.vendorId && p.deviceId
+                ? '  ·  ' + p.vendorId + '/' + p.deviceId
+                : ''
+              $('<div>').css({ padding: '2px 0', color: p.connected ? '' : '#888' })
+                .text('Port ' + p.port + ' — ' +
+                  (p.connected ? (p.productName || 'unnamed device') : 'empty') +
+                  (p.modeText ? '  (' + p.modeText + ')' : '') + id)
+                .appendTo(list)
+            })
+          })
+          .fail(function (xhr) {
+            const body = xhr.responseJSON || {}
+            status.css('color', '#a44').text(body.error || 'scan failed')
+          })
+      })
+    }
+  })
+</script>
+
+<script type="text/html" data-template-name="iolink-scan">
+  <div class="form-row">
+    <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-input-name">
+  </div>
+  <div class="form-row">
+    <label for="node-input-master"><i class="fa fa-server"></i> Master</label>
+    <input type="text" id="node-input-master">
+  </div>
+  <div class="form-row">
+    <label for="node-input-ports"><i class="fa fa-plug"></i> Ports</label>
+    <input type="text" id="node-input-ports" placeholder="all ports">
+  </div>
+  <div class="form-row">
+    <label for="node-input-resolveIodd"><i class="fa fa-file-o"></i> IODD</label>
+    <input type="checkbox" id="node-input-resolveIodd" style="width:auto">
+    <span>Look the IODD up for each device</span>
+  </div>
+  <div class="form-row">
+    <button type="button" class="red-ui-button" id="iolink-scan">
+      <i class="fa fa-search"></i> Try it now
+    </button>
+    <span id="iolink-scan-status" style="margin-left:10px"></span>
+  </div>
+  <div class="form-row">
+    <div id="iolink-ports"
+         style="max-height:220px;overflow:auto;border:1px solid #ccc;border-radius:4px;padding:6px">
+      <div class="form-tips">Scanning here does the same thing the node does at
+        runtime, so you can check the master answers before you wire anything up.</div>
+    </div>
+  </div>
+</script>
+
+<script type="text/html" data-help-name="iolink-scan">
+  <p>Asks a master what is plugged into it: which ports are occupied, by which
+     device, and — if enabled — whether an IODD for that device could be found.</p>
+  <p>This is usually the first node you place when commissioning a line, and it is
+     what the scan button in the other nodes uses behind the scenes.</p>
+
+  <h3>Input</h3>
+  <dl class="message-properties">
+    <dt class="optional">ports <span class="property-type">array | string | number</span></dt>
+    <dd>Restricts the scan to these port numbers, overriding the configuration.
+        <code>[1, 2]</code>, <code>"1,2"</code> and <code>2</code> all work. A
+        list that holds no port number is refused with
+        <code>IOLINK_BAD_PORT</code> rather than quietly scanning everything.</dd>
+  </dl>
+
+  <h3>Output</h3>
+  <p><code>msg.payload</code> is one entry per port: port number, whether a device
+     answers, its status and mode, and its vendor and device ID.</p>
+  <p>With IODD lookup on, each occupied port also carries an <code>iodd</code>
+     object naming the vendor and product, the IO-Link revision, the process data
+     variants and how many parameters the device exposes. A device whose IODD is
+     not published reports the reason there instead — that is a finding about the
+     device, not a failed scan, so the rest of the result still arrives.</p>
+</script>

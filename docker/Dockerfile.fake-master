@@ -1,0 +1,21 @@
+# The fake ifm IoT Core master, as a standalone service.
+#
+# It speaks the real request and reply envelope, so a whole Node-RED flow can
+# be exercised without an IO-Link master on the desk. With SIM_PLANT set it
+# populates its ports from real IODDs and lets the values move; without it the
+# rack is the fixed one the tests rely on.
+FROM node:20-alpine
+
+WORKDIR /app
+
+# The IODD parser comes along: a simulated port encodes its process data
+# through the device's own IODD rather than replaying a hex string.
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --no-audit --no-fund
+COPY lib/ ./lib/
+COPY test/fake-master.js ./test/
+COPY test/fixtures/ ./test/fixtures/
+
+ENV PORT=8080
+EXPOSE 8080
+CMD ["node", "test/fake-master.js"]

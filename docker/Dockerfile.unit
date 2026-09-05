@@ -1,0 +1,12 @@
+# Unit tests in a clean container: the whole suite, no hardware, no network.
+FROM node:20-alpine
+
+WORKDIR /src
+
+# The manifest first, so the dependency layer survives an edit to the source.
+COPY package.json package-lock.json ./
+RUN npm install --no-audit --no-fund
+
+COPY . .
+
+CMD ["npm", "test"]
