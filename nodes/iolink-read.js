@@ -164,7 +164,12 @@ module.exports = function (RED) {
     node.on('input', (msg, send, done) => { readOnce(msg, send, done) })
 
     const interval = Number(config.interval) || 0
-    if (interval > 0) {
+    if (interval > 0 && config.portType === 'msg') {
+      // A timer has no message to take the port from. Erroring on every tick
+      // would only fill the log, so say it once and leave polling off.
+      node.status({ fill: 'yellow', shape: 'ring', text: 'polling needs a fixed port' })
+      node.warn(`polling is off: the port comes from msg.${config.port}, which a timer cannot supply`)
+    } else if (interval > 0) {
       node.status({ fill: 'grey', shape: 'ring', text: `polling every ${interval} ms` })
       stopPolling = startPolling(node, interval, asTick(readOnce))
     }

@@ -258,3 +258,22 @@ test('a master answering something that is not hex is refused rather than decode
     assert.match(err.message, /^IOLINK_BAD_HEX: the value the master returned for "Switch point" is not hex: "err"/)
   } finally { await close() }
 })
+
+test('a non-string msg.action is handled, not an unhandled rejection', async () => {
+  const { node, close } = await setup({ parameter: 'Switch point' })
+  try {
+    // 1 is not "write", so the node reads, the same as for any unknown action.
+    const [msg] = await node.receive({ action: 1 })
+    assert.equal(msg.payload, 23.47)
+  } finally { await close() }
+})
+
+test('a numeric string payload is scaled like a number on write', async () => {
+  const { node, master, close } = await setup({ parameter: 'Switch point', action: 'write' })
+  try {
+    await node.receive({ payload: '23.5' })
+    assert.equal(master.state.ports[1].isdu['100/0'], '092E') // 2350
+    const err = await node.receiveExpectingError({ payload: '0x10' })
+    assert.match(err.message, /0x10/)
+  } finally { await close() }
+})

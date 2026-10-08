@@ -46,16 +46,19 @@ module.exports = function (RED) {
 
         let base
         if (merge && Object.keys(values).length < layout.items.length) {
+          const unavailable = reason => Object.assign(new Error(
+            `cannot read the current output of port ${port} to merge into ` +
+            `(${reason}). Supply every value, or turn off "merge".`),
+          { code: 'IOLINK_MERGE_UNAVAILABLE' })
           try {
             base = await master.adapter.readProcessDataOut(port)
           } catch (e) {
             // Not every master can read its output back. Say so rather than
             // silently zeroing the fields the flow did not mention.
-            throw Object.assign(new Error(
-              `cannot read the current output of port ${port} to merge into ` +
-              `(${e.message}). Supply every value, or turn off "merge".`),
-            { code: 'IOLINK_MERGE_UNAVAILABLE' })
+            throw unavailable(e.message)
           }
+          // An empty answer is the same problem as no answer.
+          if (base === null || base === undefined || base === '') throw unavailable('the master returned no data')
         }
 
         const buf = device.encodeOut(values, {

@@ -42,7 +42,7 @@ const DEFAULT_STATE = () => ({
   ports: {
     1: {
       status: 2,
-      mode: 1,
+      mode: 3,
       vendorId: 999,
       deviceId: 4242,
       productName: 'DEMO-100',
@@ -63,8 +63,8 @@ const DEFAULT_STATE = () => ({
         '37/0': 'E48C40000000'
       }
     },
-    2: { status: 0, mode: 1 },
-    3: { status: 0, mode: 2 }
+    2: { status: 0, mode: 3 },
+    3: { status: 0, mode: 1 }
   }
 })
 
@@ -147,7 +147,7 @@ function loadPlant (source, { baseDir = process.cwd() } = {}) {
 
 function buildPort (spec, dir) {
   const port = {
-    mode: spec.mode ?? 1,
+    mode: spec.mode ?? 3,
     status: spec.status ?? (spec.connected === false ? 0 : 2),
     isdu: { ...(spec.isdu || {}) },
     pdout: spec.pdout || '00'
@@ -198,10 +198,13 @@ class FakeMaster {
    * @param {object} [state]  a rack, from DEFAULT_STATE() or loadPlant()
    * @param {object} [options]
    * @param {Function} [options.now]  the clock, so a test can pin the time
+   * @param {string} [options.password]  enables security mode: every request
+   *   must then carry `auth: { user, passwd }` (both Base64) for "administrator"
    */
   constructor (state, options = {}) {
     this.state = state || DEFAULT_STATE()
     this.now = options.now || (() => Date.now())
+    this.password = options.password
     this.requests = []
     this.server = http.createServer((req, res) => this._handle(req, res))
   }
@@ -264,12 +267,18 @@ class FakeMaster {
     })
   }
 
-  dispatch ({ adr = '', data }) {
+  dispatch ({ adr = '', data, auth }) {
     const value = v => ({ code: 200, data: { value: v } })
     const ok = () => ({ code: 200 })
     const fail = (code, message) => ({ code, data: { message } })
 
+    // Like the real master, productcode stays readable without authentication.
     if (adr === '/deviceinfo/productcode/getdata') return value(this.state.product)
+    if (this.password !== undefined) {
+      const b64 = text => Buffer.from(text).toString('base64')
+      const good = auth && auth.user === b64('administrator') && auth.passwd === b64(this.password)
+      if (!good) return fail(401, 'authentication required')
+    }
     if (adr === '/deviceinfo/serialnumber/getdata') return value(this.state.serial)
 
     const match = adr.match(/^\/iolinkmaster\/port\[(\d+)\]\/(.+)$/)
@@ -296,7 +305,8 @@ class FakeMaster {
         if (!data || typeof data.newvalue !== 'string') return fail(400, 'newvalue missing')
         if (data.newvalue.length % 2) return fail(400, 'odd-length hex')
         port.pdout = data.newvalue.toUpperCase()
-        return ok()
+        // A master may accept a value and still adjust it: that is code 232, not a failure.
+        return port.acceptWithAdjustment ? { code: 232 } : ok()
       case 'iolinkdevice/iolreadacyclic': {
         const key = `${Number(data && data.index)}/${Number((data && data.subindex) || 0)}`
         const hit = (port.isdu || {})[key]

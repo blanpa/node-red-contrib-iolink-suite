@@ -122,6 +122,7 @@ test('a master that sends its headers and then stalls still hits the timeout', a
   try {
     const e = await requestJson(s.url, { timeout: 120 }).catch(e => e)
     assert.ok(e instanceof MasterError)
-    assert.match(e.message, /no reply from .* within 120 ms/)
+    // Said apart from silence: the master is there, its reply broke off.
+    assert.match(e.message, /started a reply but did not finish it within 120 ms/)
   } finally { await s.close() }
 })

@@ -131,3 +131,31 @@ test('needs both ids to look anything up', async () => {
   const finder = new IoddFinder({ cacheDir: tempDir(), offline: true })
   await assert.rejects(() => finder.load({ vendorId: 999 }), /need both vendorId and deviceId/)
 })
+
+test('concurrent stores all end up in the index', async () => {
+  const finder = new IoddFinder({ cacheDir: tempDir(), offline: true })
+  const xml = fixture('demo-sensor.iodd.xml')
+  await Promise.all([1, 2, 3, 4, 5, 6].map(n =>
+    finder.store(xml, { vendorId: 999, deviceId: 4000 + n, ioddId: n, source: 'test' })))
+  const index = await finder.list()
+  assert.deepEqual(index.map(e => e.deviceId).sort(), [4001, 4002, 4003, 4004, 4005, 4006])
+})
+
+test('a cache file name never leaves the cache directory', async () => {
+  const cacheDir = tempDir()
+  const finder = new IoddFinder({ cacheDir, offline: true })
+  const { entry } = await finder.importPackage(fixture('demo-sensor.iodd.xml'), { ioddId: '../../escape' })
+  assert.equal(path.dirname(path.resolve(cacheDir, entry.file)), path.resolve(cacheDir))
+  assert.ok(fs.existsSync(path.join(cacheDir, entry.file)))
+})
+
+test('translation files are cached and used on later loads', async () => {
+  const finder = new IoddFinder({ cacheDir: tempDir(), offline: true })
+  const de = '<ExternalTextDocument xmlns="http://www.io-link.com/IODD/2010/10">' +
+    '<Language xml:lang="it"><Text id="TI_DeviceName" value="Sensore demo"/></Language></ExternalTextDocument>'
+  await finder.store(fixture('demo-sensor.iodd.xml'),
+    { vendorId: 999, deviceId: 4242, ioddId: 7, source: 'test' }, [{ lang: 'it', xml: de }])
+  const { device, entry } = await finder.load({ vendorId: 999, deviceId: 4242 }, { parse: { language: 'it' } })
+  assert.deepEqual(entry.texts, [{ lang: 'it', file: '999-4242-7-it.xml' }])
+  assert.equal(device.identity.deviceName, 'Sensore demo')
+})

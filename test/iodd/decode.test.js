@@ -71,3 +71,18 @@ test('process data output can be decoded back', () => {
   const { payload } = demo().decodeOut('0b')
   assert.deepEqual(payload, { Valve: true, Intensity: 5 })
 })
+
+test('TimeT is an unsigned NTP timestamp', () => {
+  const { decodeItem, encodeItem } = require('../../lib/iodd')
+  const item = { key: 't', type: 'Time', bitOffset: 0, bitLength: 64 }
+  const buf = Buffer.from('e000000000000000', 'hex')
+  assert.equal(decodeItem(buf, item, { bigInt: 'always' }), 0xe000000000000000n)
+  assert.equal(encodeItem(Buffer.alloc(8), item, 0xe000000000000000n).toString('hex'), 'e000000000000000')
+})
+
+test('Float32 single values match their text numerically', () => {
+  const { decodeLayout } = require('../../lib/iodd')
+  const layout = { octetLength: 4, bitLength: 32, items: [{ key: 'f', type: 'Float32', bitOffset: 0, bitLength: 32, values: [{ value: '1.0', name: 'one' }, { value: '200.00', name: 'two hundred' }] }] }
+  const one = Buffer.alloc(4); one.writeFloatBE(1)
+  assert.equal(decodeLayout(one, layout, { enums: 'text' }).payload.f, 'one')
+})

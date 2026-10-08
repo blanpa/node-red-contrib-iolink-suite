@@ -138,8 +138,14 @@
           return status.css('color', '#a44')
             .text('type the port here to scan it — a port that comes from a message is not known yet')
         }
+        // Ids set on the node stand in for a master that cannot report them.
+        const vendorId = $('#node-input-vendorId').val()
+        const deviceId = $('#node-input-deviceId').val()
+        const pinned = vendorId && deviceId
+          ? '&vendorId=' + encodeURIComponent(vendorId) + '&deviceId=' + encodeURIComponent(deviceId)
+          : ''
         const variant = $('#node-input-variant').val()
-        const query = '?direction=in' +
+        const query = '?direction=in' + pinned +
           (variant ? '&variant=' + encodeURIComponent(variant) : '')
 
         // One port after another, the way the node itself reads them, so a rack
@@ -212,6 +218,13 @@
       $('#iolink-select-none').on('click', function () {
         list.find('input[type=checkbox]').prop('checked', false)
       })
+
+      if (node.variant) {
+        // Show the saved variant until a scan replaces the list.
+        $('#node-input-variant').append($('<option>').val(node.variant).text(node.variant))
+          .val(node.variant)
+        $('.iolink-variant-row').show()
+      }
 
       if (node.values && node.values.length) {
         renderChecklist([{
@@ -311,7 +324,7 @@
   <div class="form-row">
     <label for="node-input-interval"><i class="fa fa-repeat"></i> Poll</label>
     <input type="text" id="node-input-interval" style="width:100px" placeholder="0"> ms
-    <span style="color:#888">0 reads only on an incoming message</span>
+    <span style="color:#888">0 reads only on an incoming message; polling needs a port that is not taken from msg</span>
   </div>
 
   <hr>
@@ -396,7 +409,8 @@
   <p>With a poll interval the node reads on its own: once as soon as the flow is
      deployed, and then on every tick. A tick is skipped rather than queued if
      the previous read is still running, so a slow master cannot build a backlog,
-     and nothing is sent once the flow is stopped.</p>
+     and nothing is sent once the flow is stopped. A timer has no message to take
+     the port from, so with the port set to <code>msg</code> polling stays off.</p>
 
   <h3>Device identity</h3>
   <p>The node normally asks the port which device is on it and caches the answer

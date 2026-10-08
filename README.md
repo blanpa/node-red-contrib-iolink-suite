@@ -90,7 +90,9 @@ dialog says so next to the choice, and `npm run record` (below) is how that
 changes.
 
 - **ifm IoT Core** — AL13xx / AL19xx / AL2xxx, after ifm's IoT Core
-  documentation: one POST endpoint, the address in the body.
+  documentation: one POST endpoint, the address in the body. With security
+  mode on, set the master's password (the user is always `administrator`);
+  it travels Base64-coded in the request body, as ifm specifies.
 - **IO-Link JSON API** — the IO-Link Community's *JSON Integration for
   IO-Link* (spec 10.222, V1.0.0), the one REST interface several vendors
   share: Balluff and Pepperl+Fuchs ship it on their newer masters, others are
@@ -476,8 +478,9 @@ fetches a set from IODDfinder; the decoder's corpus tests skip without it.
 
 One file in `lib/adapters/`, one entry in `lib/adapters/index.js`. Adapters
 deal in **raw hex only** — decoding stays in `lib/iodd` — so a new vendor never
-touches the decoding path. Profiles verified against real hardware are marked
-as such in the registry; please say which you tested against.
+touches the decoding path. Cite the vendor document for every endpoint and
+constant, and say which hardware you tested against: a guessed value looks fine
+in the unit tests and fails on the first real master.
 
 ## Sponsor this project
 

@@ -71,7 +71,13 @@
           return status.css('color', '#a44')
             .text('type the port here to load its parameters — a port that comes from a message is not known yet')
         }
-        $.getJSON('iolink-suite/parameters/' + masterId + '/' + port)
+        // Ids set on the node stand in for a master that cannot report them.
+        const vendorId = $('#node-input-vendorId').val()
+        const deviceId = $('#node-input-deviceId').val()
+        const pinned = vendorId && deviceId
+          ? '?vendorId=' + encodeURIComponent(vendorId) + '&deviceId=' + encodeURIComponent(deviceId)
+          : ''
+        $.getJSON('iolink-suite/parameters/' + masterId + '/' + port + pinned)
           .done(function (result) {
             status.css('color', '#4a4').text(
               result.device.vendorName + ' — ' + result.parameters.length + ' parameters')

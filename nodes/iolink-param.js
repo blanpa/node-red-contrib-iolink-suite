@@ -3,7 +3,7 @@ const {
   sharedIdentityCache, resolveDevice, describeDevice, fail, evaluate, resolvePort, withCode,
   parseHex
 } = require('../lib/runtime')
-const { decodeItem, encodeItem, applyScale, removeScale } = require('../lib/iodd')
+const { decodeItem, encodeItem, coerceNumeric, applyScale, removeScale } = require('../lib/iodd')
 
 module.exports = function (RED) {
   /**
@@ -32,7 +32,7 @@ module.exports = function (RED) {
     const identityTtl = Number(config.identityTtl) || 30000
 
     node.on('input', async function (msg, send, done) {
-      const action = (msg.action || config.action || 'read').toLowerCase()
+      const action = String(msg.action || config.action || 'read').toLowerCase()
       // The message wins over the dialog, as the help says it does: a flow that
       // sets msg.parameter has decided, whatever the node was left set to.
       const asked = msg.parameter !== undefined && msg.parameter !== null && msg.parameter !== ''
@@ -315,6 +315,7 @@ module.exports = function (RED) {
       const hit = item.values.find(v => v.name === value)
       if (hit) raw = item.type === 'Boolean' ? hit.value === 'true' : Number(hit.value)
     }
+    raw = coerceNumeric(item, raw)
     if (typeof raw === 'number') {
       if (item.min !== undefined && raw < item.min) {
         throw Object.assign(

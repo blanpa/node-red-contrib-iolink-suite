@@ -201,3 +201,19 @@ test('an IODD edited in the folder is picked up again', async () => {
     fs.rmSync(dir, { recursive: true, force: true })
   }
 })
+
+test('translation files beside a local IODD are used', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'iodd-local-'))
+  try {
+    fs.copyFileSync(DEMO, path.join(dir, 'DEMO-IODD1.1.xml'))
+    fs.writeFileSync(path.join(dir, 'DEMO-IODD1.1-it.xml'),
+      '<ExternalTextDocument xmlns="http://www.io-link.com/IODD/2010/10"><Language xml:lang="it">' +
+      '<Text id="TI_DeviceName" value="Sensore demo"/></Language></ExternalTextDocument>')
+    const s = new IoddStore({ localDir: dir, offline: true })
+    const { device, source } = await s.device(999, 4242, { language: 'it' })
+    assert.equal(source, 'file')
+    assert.equal(device.identity.deviceName, 'Sensore demo')
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})

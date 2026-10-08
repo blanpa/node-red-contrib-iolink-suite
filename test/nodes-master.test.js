@@ -178,3 +178,17 @@ test('the pickers refuse a port that is not a number instead of asking the maste
     }
   } finally { await close() }
 })
+
+test('the pickers accept a pinned identity, for masters that cannot report one', async () => {
+  const { RED, close } = await setup()
+  try {
+    // Port 2 is empty, so only the pinned ids can tell which IODD to show.
+    const { status, body } = await RED.callRoute('GET', '/iolink-suite/datapoints/:id/:port',
+      { id: 'master-1', port: '2' }, { vendorId: '999', deviceId: '4242' })
+    assert.equal(status, 200)
+    assert.ok(body.items.some(i => i.key === 'Temperature'))
+    const params = await RED.callRoute('GET', '/iolink-suite/parameters/:id/:port',
+      { id: 'master-1', port: '2' }, { vendorId: '999', deviceId: '4242' })
+    assert.ok(params.body.parameters.some(p => p.name === 'Switch point'))
+  } finally { await close() }
+})

@@ -90,3 +90,30 @@ test('reports a package with no XML clearly', () => {
   const zip = makeZip({ 'readme.txt': 'hello' })
   assert.throws(() => extractIodd(zip), /contains no .xml file/)
 })
+
+test('translation files travel with the IODD', () => {
+  const de = '<?xml version="1.0"?><ExternalTextDocument xmlns="http://www.io-link.com/IODD/2010/10">' +
+    '<Language xml:lang="de"><Text id="TI_DeviceName" value="Demo-Sensor (extern)"/></Language></ExternalTextDocument>'
+  const zip = makeZip({
+    'DEMO-100-IODD1.1.xml': fixture('demo-sensor.iodd.xml'),
+    'DEMO-100-IODD1.1-de.xml': de,
+    'DEMO-100-IODD1.1-fr.xml': '<ExternalTextDocument><Language><Text id="x" value="y"/></Language></ExternalTextDocument>'
+  })
+  const { name, texts } = extractIodd(zip)
+  assert.equal(name, 'DEMO-100-IODD1.1.xml')
+  assert.deepEqual(texts.map(t => [t.name, t.lang]),
+    [['DEMO-100-IODD1.1-de.xml', 'de'], ['DEMO-100-IODD1.1-fr.xml', 'fr']])
+})
+
+test('corrupt compressed data is an IoddError, not a zlib crash', () => {
+  const zip = makeZip({ 'a.xml': '<IODevice/>' })
+  const entry = listEntries(zip)[0]
+  // Scribble over the compressed payload.
+  const start = entry.localOffset + 30 + Buffer.byteLength(entry.name)
+  zip.fill(0xff, start, start + entry.compressedSize)
+  assert.throws(() => readEntry(zip, entry), e => {
+    assert.equal(e.name, 'IoddError')
+    assert.match(e.message, /corrupt compressed data in ZIP entry "a.xml"/)
+    return true
+  })
+})

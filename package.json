@@ -58,7 +58,8 @@
     "lib/",
     "nodes/",
     "examples/",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "devDependencies": {
     "standard": "^17.1.2"

@@ -81,6 +81,7 @@ the *first* two octets on the wire. Blocks whose bit length is not a multiple of
 | `language` | `'en'` | preferred language; falls back per string to the primary language |
 | `keyStyle` | `'preserve'` | `preserve`, `camel`, `pascal`, `snake`, `kebab` — output key style |
 | `conditions` | `{}` | current parameter values, keyed by variable id, that select layouts and scalings |
+| `externalTexts` | `[]` | the `<ExternalTextDocument>` files shipped beside the IODD (`*-de.xml`, …); `extractIodd` and the finder collect them for you |
 
 ### `IoddDevice`
 

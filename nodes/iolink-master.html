@@ -106,6 +106,7 @@
   <div class="form-row">
     <label for="node-config-input-user"><i class="fa fa-user"></i> User</label>
     <input type="text" id="node-config-input-user" placeholder="leave empty if unsecured">
+    <span style="color:#888">ifm: always <code>administrator</code>, only the password matters</span>
   </div>
   <div class="form-row">
     <label for="node-config-input-password"><i class="fa fa-key"></i> Password</label>
@@ -201,7 +202,9 @@
   <dl class="message-properties">
     <dt>ifm IoT Core</dt>
     <dd>ifm AL13xx / AL19xx / AL2xxx, after ifm's IoT Core documentation: one
-        POST endpoint, the address in the body.</dd>
+        POST endpoint, the address in the body. <b>User</b> and <b>Password</b> are
+        the IoT Core security-mode credentials and travel in the request body as ifm
+        specifies; tick HTTPS when security mode is on.</dd>
     <dt>IO-Link JSON API</dt>
     <dd>The IO-Link Community's "JSON Integration for IO-Link" REST interface,
         which several vendors share — Balluff and Pepperl+Fuchs among them.

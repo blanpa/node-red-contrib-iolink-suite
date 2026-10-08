@@ -497,3 +497,14 @@ test('parseHex refuses what Buffer.from would silently cut short', () => {
       e => e.code === 'IOLINK_BAD_HEX' && /^the value (is not hex|has an odd number)/.test(e.message))
   }
 })
+
+test('"no device" is trusted only briefly, so a plugged-in device is noticed', async () => {
+  const cache = new PortIdentityCache(10000, 30)
+  const adapter = countingAdapter({ port: 1, connected: false })
+  assert.equal((await cache.get(adapter, 1)).connected, false)
+  await cache.get(adapter, 1)
+  assert.equal(adapter.scans, 1)
+  await new Promise(resolve => setTimeout(resolve, 40))
+  await cache.get(adapter, 1)
+  assert.equal(adapter.scans, 2, 'an empty port must be re-scanned after the short TTL')
+})

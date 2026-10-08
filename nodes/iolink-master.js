@@ -161,19 +161,35 @@ module.exports = function (RED) {
       return ports
     }))
 
+  /**
+   * Which device the editor is asking about: the ids set on the node, or what
+   * the port reports. A master that cannot report them needs the ids, so the
+   * picker passes them along.
+   */
+  async function identityFor (node, req, port) {
+    if (req.query.vendorId && req.query.deviceId) {
+      return { vendorId: Number(req.query.vendorId), deviceId: Number(req.query.deviceId) }
+    }
+    const [status] = await node.adapter.scanPorts([port])
+    if (status && status.error) throw new Error(`port ${port} could not be asked: ${status.error}`)
+    if (!status || !status.vendorId) {
+      throw new Error(`port ${port} reports no IO-Link device` +
+        (status && status.connected === null
+          ? '; this master cannot identify devices, set the vendor and device id on the node'
+          : ''))
+    }
+    return status
+  }
+
   /** List the decoded values available on a port, for the checkbox picker. */
   RED.httpAdmin.get('/iolink-suite/datapoints/:id/:port',
     RED.auth.needsPermission('flows.write'),
     withMaster(async (node, req) => {
       const port = portParam(req)
       const direction = req.query.direction === 'out' ? 'out' : 'in'
-      const [status] = await node.adapter.scanPorts([port])
-      if (status && status.error) throw new Error(`port ${port} could not be asked: ${status.error}`)
-      if (!status || !status.vendorId) {
-        throw new Error(`port ${port} reports no IO-Link device`)
-      }
+      const identity = await identityFor(node, req, port)
       const { device } = await node.iodd.device(
-        status.vendorId, status.deviceId, node.parseOptions())
+        identity.vendorId, identity.deviceId, node.parseOptions())
 
       const variantId = req.query.variant || undefined
       const variants = device.variants
@@ -208,11 +224,9 @@ module.exports = function (RED) {
     RED.auth.needsPermission('flows.write'),
     withMaster(async (node, req) => {
       const port = portParam(req)
-      const [status] = await node.adapter.scanPorts([port])
-      if (status && status.error) throw new Error(`port ${port} could not be asked: ${status.error}`)
-      if (!status || !status.vendorId) throw new Error(`port ${port} reports no IO-Link device`)
+      const identity = await identityFor(node, req, port)
       const { device } = await node.iodd.device(
-        status.vendorId, status.deviceId, node.parseOptions())
+        identity.vendorId, identity.deviceId, node.parseOptions())
       return {
         device: describe(device),
         parameters: device.variables

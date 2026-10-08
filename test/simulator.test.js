@@ -41,7 +41,7 @@ test('a plant file fills the ports from real IODDs', () => {
   assert.equal(state.ports[1].deviceId, 4242)
   assert.equal(state.ports[1].productName, 'DEMO-100')
   assert.equal(state.ports[3].status, 0, 'a port declared unconnected stays empty')
-  assert.equal(state.ports[4].mode, 2)
+  assert.equal(state.ports[4].mode, 1, 'a port declared as a digital input')
 })
 
 test('the process data is encoded through the device IODD, not typed by hand', () => {

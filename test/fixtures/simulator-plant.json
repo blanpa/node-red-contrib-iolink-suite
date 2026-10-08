@@ -36,6 +36,6 @@
 
     "3": { "connected": false },
 
-    "4": { "connected": false, "mode": 2 }
+    "4": { "connected": false, "mode": 1 }
   }
 }

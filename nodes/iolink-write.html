@@ -20,11 +20,17 @@
     icon: 'iolink.svg',
     label: function () { return this.name || ('write port ' + (this.port || '?')) },
     oneditprepare: function () {
+      const node = this
       $('#node-input-port').typedInput({
         default: 'num',
         typeField: '#node-input-portType',
         types: ['num', 'msg', 'flow', 'global', 'env']
       })
+      if (node.variant) {
+        $('#node-input-variant').append($('<option>').val(node.variant).text(node.variant))
+          .val(node.variant)
+        $('.iolink-variant-row').show()
+      }
       $('#iolink-scan').on('click', function () {
         const masterId = $('#node-input-master').val()
         const port = $('#node-input-port').val()
@@ -32,8 +38,14 @@
         if (!masterId || masterId === '_ADD_') {
           return status.css('color', '#a44').text('choose and deploy a master first')
         }
+        // Ids set on the node stand in for a master that cannot report them.
+        const vendorId = $('#node-input-vendorId').val()
+        const deviceId = $('#node-input-deviceId').val()
+        const pinned = vendorId && deviceId
+          ? '&vendorId=' + encodeURIComponent(vendorId) + '&deviceId=' + encodeURIComponent(deviceId)
+          : ''
         const variant = $('#node-input-variant').val()
-        const query = '?direction=out' +
+        const query = '?direction=out' + pinned +
           (variant ? '&variant=' + encodeURIComponent(variant) : '')
         $.getJSON('iolink-suite/datapoints/' + masterId + '/' +
                   encodeURIComponent(port) + query)

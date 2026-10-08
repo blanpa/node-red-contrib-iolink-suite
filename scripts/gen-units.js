@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict'
 /**
- * Regenerates src/units.js from the OPC Foundation's normative mapping of
+ * Regenerates lib/iodd/units.js from the OPC Foundation's normative mapping of
  * IO-Link unitCodes to engineering units (Annex C of the OPC UA companion
  * specification "OPC UA for IO-Link Devices and IO-Link Masters").
  *
@@ -24,6 +24,25 @@ async function load (src) {
   return fs.readFileSync(src, 'utf8')
 }
 
+/** Split one ';'-separated line, honouring double-quoted cells ("" is a quote). */
+function splitCsvLine (line) {
+  const cells = []
+  let cell = ''
+  let quoted = false
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i]
+    if (quoted) {
+      if (c === '"' && line[i + 1] === '"') { cell += '"'; i++ } else if (c === '"') { quoted = false } else cell += c
+    } else if (c === '"') {
+      quoted = true
+    } else if (c === ';') {
+      cells.push(cell); cell = ''
+    } else cell += c
+  }
+  cells.push(cell)
+  return cells
+}
+
 function parseCsv (text) {
   const rows = []
   // eslint-disable-next-line no-irregular-whitespace -- a literal BOM, on purpose
@@ -35,7 +54,7 @@ function parseCsv (text) {
   if (iCode < 0 || iName < 0) throw new Error(`unexpected CSV header: ${header.join(';')}`)
   for (const line of lines) {
     if (!line.trim()) continue
-    const cells = line.split(';')
+    const cells = splitCsvLine(line)
     const code = Number(cells[iCode])
     if (!Number.isInteger(code)) continue
     rows.push({ code, symbol: (cells[iName] || '').trim(), name: (cells[iDesc] || '').trim() })

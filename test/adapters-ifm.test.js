@@ -163,3 +163,69 @@ test('an unreachable master fails with a message naming the URL', async () => {
   const e = await adapter.readProcessDataIn(1).catch(e => e)
   assert.match(e.message, /cannot reach http:\/\/127\.0\.0\.1:1\//)
 })
+
+test('security mode: credentials travel Base64-coded in the request body', async () => {
+  const master = await new FakeMaster(undefined, { password: 's3cret' }).listen()
+  try {
+    const locked = createAdapter('ifm', { url: master.url, timeout: 2000 })
+    await assert.rejects(() => locked.readProcessDataIn(1), err => {
+      assert.equal(err.ioTCoreCode, 401)
+      assert.match(err.message, /security mode is active/)
+      return true
+    })
+
+    // The user name is fixed to "administrator", so a password alone must do.
+    const open = createAdapter('ifm', { url: master.url, timeout: 2000, password: 's3cret' })
+    assert.equal(await open.readProcessDataIn(1), '092b0929')
+    const sent = master.requests.at(-1)
+    assert.deepEqual(sent.auth, {
+      user: Buffer.from('administrator').toString('base64'),
+      passwd: Buffer.from('s3cret').toString('base64')
+    })
+  } finally {
+    await master.close()
+  }
+})
+
+test('"OK but adjusted" (code 232) counts as success, other codes carry their meaning', async () => {
+  await withMaster(async (adapter, master) => {
+    master.state.ports[1].acceptWithAdjustment = true
+    assert.equal(await adapter.writeProcessDataOut(1, '0c'), true)
+    assert.equal(master.state.ports[1].pdout, '0C')
+
+    master.state.ports[2].status = 0
+    await assert.rejects(() => adapter.readProcessDataIn(2), err => {
+      assert.equal(err.ioTCoreCode, 800)
+      return true
+    })
+  })
+})
+
+test('port status and mode texts follow the IoT Core numbering', async () => {
+  await withMaster(async (adapter, master) => {
+    master.state.ports[3].status = 3
+    const wrong = await adapter.readPortStatus(3)
+    assert.equal(wrong.connected, false)
+    assert.equal(wrong.statusText, 'incorrect device / communication error')
+
+    // port[n]/mode: 0 off, 1 DI, 2 DO, 3 IO-Link, as an AL1352 reports it (issue #2).
+    for (const [mode, text] of [[0, 'deactivated'], [1, 'digital input (DI)'],
+      [2, 'digital output (DO)'], [3, 'IO-Link'], [7, 'unknown mode 7']]) {
+      master.state.ports[3].mode = mode
+      const status = await adapter.readPortStatus(3)
+      assert.equal(status.mode, mode)
+      assert.equal(status.modeText, text)
+    }
+
+    // A value the table does not know is reported, not silently dropped.
+    master.state.ports[3].status = 9
+    assert.equal((await adapter.readPortStatus(3)).statusText, 'unknown status 9')
+  })
+})
+
+test('correlation ids stay inside the range the master accepts', () => {
+  const adapter = createAdapter('ifm', { host: 'm.local' })
+  adapter._cid = 29999
+  assert.equal(adapter._nextCid(), 30000)
+  assert.equal(adapter._nextCid(), 1)
+})

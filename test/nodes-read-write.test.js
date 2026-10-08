@@ -463,3 +463,33 @@ test('nodes on one master share one identity cache', async () => {
     await write.close()
   } finally { await close() }
 })
+
+test('iolink-write refuses to merge when the read-back is empty', async () => {
+  const { RED, master, close } = await setup(['iolink-write.js'])
+  try {
+    master.state.ports[1].pdout = '0B' // Valve on, Intensity 5
+    const node = RED.create('iolink-write', { master: 'master-1', port: 1, portType: 'num' })
+    const adapter = RED.nodes.getNode('master-1').adapter
+    const original = adapter.readProcessDataOut
+    adapter.readProcessDataOut = async () => null
+    try {
+      const err = await node.receiveExpectingError({ payload: { Valve: true } })
+      assert.match(err.message, /IOLINK_MERGE_UNAVAILABLE/)
+      assert.equal(master.state.ports[1].pdout, '0B')
+    } finally { adapter.readProcessDataOut = original }
+    await node.close()
+  } finally { await close() }
+})
+
+test('iolink-read does not poll a port that only a message can name', async () => {
+  const { RED, master, close } = await setup(['iolink-read.js'])
+  try {
+    const node = RED.create('iolink-read',
+      { master: 'master-1', port: 'port', portType: 'msg', interval: 20 })
+    assert.match(node.lastStatus.text, /polling needs a fixed port/)
+    assert.equal(node.warnings.length, 1)
+    await new Promise(resolve => setTimeout(resolve, 80))
+    assert.equal(master.requests.length, 0, 'a timer has no message, so nothing is asked')
+    await node.close()
+  } finally { await close() }
+})

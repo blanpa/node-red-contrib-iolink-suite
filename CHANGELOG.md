@@ -6,6 +6,47 @@ All notable changes to this package are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- ifm IoT Core: port modes were mislabelled. `port[n]/mode` is 0 deactivated,
+  1 digital input, 2 digital output, 3 IO-Link, as an AL1352 reports it
+  ([#2](https://github.com/blanpa/node-red-contrib-iolink-suite/issues/2));
+  a value outside the table now shows as `unknown mode n` rather than nothing.
+- ifm IoT Core: replies with code 230-233 ("OK, but ...", e.g. a value the
+  master accepted and adjusted) are no longer treated as failures, and a
+  rejection names the diagnostic code's meaning. Port status 3 reads
+  "incorrect device / communication error".
+- `iolink param` no longer fails with an unhandled error when `msg.action` is
+  not a string, and a numeric string such as `"23.5"` is written scaled, like
+  the number; `"0x10"` is refused rather than written as a raw count.
+- `iolink write` refuses to merge into an empty read-back instead of zeroing
+  the fields the message did not mention.
+- `iolink read` with the port taken from `msg` and a poll interval says once
+  that polling needs a fixed port, instead of failing on every tick.
+- An empty port is re-checked after 2 s rather than the full identity TTL, so
+  a device plugged in while the flow runs is found straight away.
+- IODD parsing: TimeT is read unsigned; numeric character references
+  (`&#176;`, `&#252;`) are decoded; Float32 enum values match numerically;
+  `US-ASCII` strings are ASCII; scaled ranges and values keep the decimals the
+  offset needs; an empty description stays empty instead of showing its text
+  id; process data written over a padded read-back keeps its leading octets,
+  as decoding does. The unit table has the correct symbol for arc seconds.
+- An HTTP reply that starts and then stalls is reported as such, not as no
+  reply at all.
+
+### Added
+
+- ifm IoT Core security mode: the master's password (user `administrator`)
+  is sent Base64-coded in the request body, as ifm's manual specifies, rather
+  than as an HTTP Basic header.
+- Translation files (`<ExternalTextDocument>`, `*-de.xml`) are used: from an
+  IODD ZIP, from IODDfinder, from the cache and from the local IODD folder.
+- `<DirectParameterOverlay>` is exposed as the index-1 parameter it describes,
+  and a scalar parameter whose scaling depends on another one is marked as
+  such, as process data items already were.
+- The data point and parameter pickers in the editor use the vendor and device
+  ids set on the node, so they work for masters that cannot report them.
+
 ### Changed
 
 - The README shows the architecture, the IODD lookup, one read from message

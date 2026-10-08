@@ -2,7 +2,13 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const { parseIodd, ERROR_CODES } = require('../../lib/iodd')
-const { demo, conditional, fixture } = require('./helpers')
+const fs = require('node:fs')
+const path = require('node:path')
+const { demo, conditional, fixture, corpusDir } = require('./helpers')
+
+/** A named IODD from the corpus, or a reason to skip when it was not fetched. */
+const corpus = name => path.join(corpusDir, name)
+const needsCorpus = name => !fs.existsSync(corpus(name)) && `needs ${name}: run \`npm run corpus\``
 
 test('reads device identity', () => {
   const d = demo()
@@ -166,4 +172,59 @@ test('key style can be adapted for topic-friendly output', () => {
   assert.ok(snake.includes('switching_signal1'), snake.join(','))
   const camel = demo({ keyStyle: 'camel' }).layout('in').items.map(i => i.key)
   assert.ok(camel.includes('temperature'), camel.join(','))
+})
+
+test('scaled ranges carry no floating point noise', () => {
+  const xml = fixture('demo-sensor.iodd.xml')
+    .replace('gradient="0.01" offset="0" unitCode="1001" displayFormat="Dec.2"/>',
+      'gradient="0.00001" offset="0" unitCode="1001"/>')
+  const layout = parseIodd(xml).layout('in')
+  const item = layout.items.find(i => i.key === 'Temperature')
+  // The raw range -5000..15000 scaled by 0.00001 is -0.05..0.15 exactly.
+  assert.equal(item.min, -0.05)
+  assert.equal(item.max, 0.15)
+})
+
+test('numeric character references are decoded, markup ones stay escaped', () => {
+  const xml = fixture('demo-sensor.iodd.xml')
+    .replace('<Text id="TI_PD_Temperature" value="Temperature"/>',
+      '<Text id="TI_PD_Temperature" value="Temperatur &#252;ber 85&#176;C &#60;max&#62; &amp; &#x41;"/>')
+  const item = parseIodd(xml).layout('in').items.find(i => i.bitOffset === 16 || i.key.startsWith('Temperatur'))
+  assert.equal(item.name, 'Temperatur über 85°C <max> & A')
+})
+
+test('external text documents supply translations the IODD itself lacks', () => {
+  const fr = '<ExternalTextDocument xmlns="http://www.io-link.com/IODD/2010/10">' +
+    '<Language xml:lang="fr"><Text id="TI_DeviceName" value="Capteur de démonstration"/></Language>' +
+    '</ExternalTextDocument>'
+  const d = parseIodd(fixture('demo-sensor.iodd.xml'), { language: 'fr', externalTexts: [fr] })
+  assert.equal(d.identity.deviceName, 'Capteur de démonstration')
+  assert.ok(d.language.available.includes('fr'))
+  // Untranslated strings still fall back to the primary language.
+  assert.equal(d.identity.variants[0].productId, 'DEMO-100')
+})
+
+test('an empty <Text value=""> is no description, not the textId', () => {
+  const xml = fixture('demo-sensor.iodd.xml')
+    .replace('<Text id="TI_PD_Temperature_Descr" value="Current process temperature"/>',
+      '<Text id="TI_PD_Temperature_Descr" value=""/>')
+  const item = parseIodd(xml).layout('in').items.find(i => i.key === 'Temperature')
+  assert.equal(item.description, undefined)
+})
+
+test('DirectParameterOverlay is exposed as the index-1 record it describes', { skip: needsCorpus('87-5747-131XX004.xml') }, () => {
+  const d = parseIodd(fs.readFileSync(corpus('87-5747-131XX004.xml'), 'utf8'))
+  const v = d.variable('V_DirectParameters')
+  assert.equal(v.index, 1)
+  assert.equal(v.directParameterOverlay, true)
+  assert.equal(v.type, 'Record')
+  assert.ok(v.items.length > 0)
+})
+
+test('a scalar parameter with ambiguous scaling says so', { skip: needsCorpus('17-3344-FTW23.xml') }, () => {
+  const d = parseIodd(fs.readFileSync(corpus('17-3344-FTW23.xml'), 'utf8'))
+  const v = d.variable('V_uCTmp')
+  assert.equal(v.scalingAmbiguous.length, 3)
+  assert.equal(v.gradient, undefined)
+  assert.ok(d.warnings.some(w => w.includes('µC-Temperature') && w.includes('conflicting')))
 })
