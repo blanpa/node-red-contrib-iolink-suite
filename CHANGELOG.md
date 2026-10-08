@@ -6,6 +6,8 @@ All notable changes to this package are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.0.2] - 2026-10-08
+
 ### Fixed
 
 - ifm IoT Core: port modes were mislabelled. `port[n]/mode` is 0 deactivated,

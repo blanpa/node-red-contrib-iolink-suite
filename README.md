@@ -129,6 +129,10 @@ Where the IODD comes from, in order:
 2. **IODDfinder**, cached on disk (`ioddCacheDir`). Tick **offline** on an
    air-gapped plant to switch this off.
 
+Translation files shipped with an IODD (`*-de.xml` and the like) are picked up
+from either source, so the master's **language** setting (e.g. `de`) also
+works for IODDs that keep their translations in a separate file.
+
 A device whose IODD is nowhere to be found is remembered as such for **retry
 after** (60 s by default), so one unpublished device on a rack does not send a
 request to IODDfinder on every poll for as long as the flow runs. Dropping the
@@ -209,7 +213,9 @@ swapped. Shorten it where devices are changed while the flow runs. The cache
 belongs to the master, not to the node: three nodes on one port ask it once,
 and the node with the shortest re-check refreshes it for the others. A master
 that does not answer is not cached, so an outage ends when the master returns
-rather than one re-check later.
+rather than one re-check later. An empty port is asked again after 2 s
+whatever the re-check, so a device plugged in while the flow runs is found
+straight away.
 
 One read, from the message to the decoded values:
 
