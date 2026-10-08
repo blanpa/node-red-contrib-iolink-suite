@@ -96,6 +96,18 @@ test('port status translates the numeric status into words', async () => {
   })
 })
 
+test('port modes follow the IoT Core enumeration reported in issue 2', async () => {
+  await withMaster(async (adapter, master) => {
+    for (const [mode, text] of [[0, 'deactivated'], [1, 'digital input (DI)'],
+      [2, 'digital output (DO)'], [3, 'IO-Link']]) {
+      master.state.ports[1].mode = mode
+      const status = await adapter.readPortStatus(1)
+      assert.equal(status.mode, mode)
+      assert.equal(status.modeText, text)
+    }
+  })
+})
+
 test('a scan reports identity only for ports that carry a device', async () => {
   await withMaster(async adapter => {
     const ports = await adapter.scanPorts([1, 2, 3])

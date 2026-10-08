@@ -36,8 +36,8 @@ class FakeJsonMaster extends FakeMaster {
 
   statusInfo (port) {
     if (port.mode === 0) return 'DEACTIVATED'
-    if (port.mode === 2) return 'DIGITAL_INPUT_C/Q'
-    if (port.mode === 3) return 'DIGITAL_OUTPUT_C/Q'
+    if (port.mode === 1) return 'DIGITAL_INPUT_C/Q'
+    if (port.mode === 2) return 'DIGITAL_OUTPUT_C/Q'
     if (port.status === 2) return 'DEVICE_ONLINE'
     if (port.status === 1) return 'DEVICE_STARTING'
     if (port.status === 3) return 'INCORRECT_DEVICE'

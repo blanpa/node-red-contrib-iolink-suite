@@ -42,7 +42,7 @@ const DEFAULT_STATE = () => ({
   ports: {
     1: {
       status: 2,
-      mode: 1,
+      mode: 3,
       vendorId: 999,
       deviceId: 4242,
       productName: 'DEMO-100',
@@ -63,8 +63,8 @@ const DEFAULT_STATE = () => ({
         '37/0': 'E48C40000000'
       }
     },
-    2: { status: 0, mode: 1 },
-    3: { status: 0, mode: 2 }
+    2: { status: 0, mode: 3 },
+    3: { status: 0, mode: 1 }
   }
 })
 
@@ -147,7 +147,7 @@ function loadPlant (source, { baseDir = process.cwd() } = {}) {
 
 function buildPort (spec, dir) {
   const port = {
-    mode: spec.mode ?? 1,
+    mode: spec.mode ?? 3,
     status: spec.status ?? (spec.connected === false ? 0 : 2),
     isdu: { ...(spec.isdu || {}) },
     pdout: spec.pdout || '00'
